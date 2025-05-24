@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional, Dict, Set
+from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
 import json
 
@@ -104,14 +104,6 @@ class Grid:
     def is_valid_position(self, x: int, y: int) -> bool:
         """检查位置是否有效"""
         return 0 <= x < self.width and 0 <= y < self.height
-
-    def is_entrance(self, x: int, y: int) -> bool:
-        """检查是否是入口"""
-        return (x, y) in self.entrances
-
-    def is_exit(self, x: int, y: int) -> bool:
-        """检查是否是出口"""
-        return (x, y) in self.exits
 
     def get_all_entrances(self) -> List[Tuple[int, int]]:
         """获取所有入口"""
