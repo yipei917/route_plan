@@ -179,7 +179,7 @@ class Scheduler:
     def load_map_and_tasks(self, map_filename: str, tasks_filename: str) -> None:
         """从JSON文件加载地图和任务"""
         self.grid.load_from_json(map_filename)
-        self.constraint_manager.set_grid(self.grid)
+        self.constraint_manager.grid = self.grid
         try:
             with open(tasks_filename, 'r', encoding='utf-8') as f:
                 tasks_data = json.load(f)
@@ -335,5 +335,5 @@ class Scheduler:
 
 if __name__ == "__main__":
     scheduler = Scheduler(num_vehicles=2)
-    # scheduler.run(num_tasks=3, max_steps=100, save_map=True, save_tasks=True)
-    scheduler.run(num_tasks=0, max_steps=100, save_map=False, save_tasks=False)
+    scheduler.run(num_tasks=3, max_steps=100, save_map=True, save_tasks=True)
+    # scheduler.run(num_tasks=0, max_steps=100, save_map=False, save_tasks=False)
