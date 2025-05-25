@@ -96,7 +96,7 @@ class Grid:
 
             # 检查是否可以通行
             neighbor_cell = self.get_cell(new_x, new_y)
-            if neighbor_cell and neighbor_cell.can_pass(direction, is_empty):
+            if neighbor_cell and neighbor_cell.can_pass(is_empty):
                 neighbors.append((new_x, new_y))
 
         return neighbors

@@ -3,48 +3,17 @@ from datetime import datetime
 import random
 import json
 import os
-from models.grid import Grid, GridCell, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE
-from models.task import TaskManager, TransportTask, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TASK_STATUS_PENDING
-from models.vehicle import Vehicle, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, \
-    VEHICLE_STATUS_IDLE, VEHICLE_STATUS_MOVING
-from models.constraints import ConstraintManager, PhysicalConstraint
-from algorithms.a_star import AStarPlanner
-from utils.visualizer import GridVisualizer
+from .models.grid import Grid, GridCell, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE
+from .models.task import TaskManager, TransportTask, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TASK_STATUS_PENDING
+from .models.vehicle import Vehicle, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, \
+    VEHICLE_STATUS_IDLE, VEHICLE_STATUS_MOVING, VEHICLE_STATUS_LOADING, VEHICLE_STATUS_UNLOADING
+from .models.constraints import ConstraintManager, PhysicalConstraint
+from .algorithms.a_star import AStarPlanner
+from .utils.visualizer import GridVisualizer
 
 SYSTEM_STATUS_COMPLETED = "completed"
 SYSTEM_STATUS_BUSY = "busy"
 SYSTEM_STATUS_WORKING = "working"
-
-
-def assign_vehicle_by_distance(vehicles: List[Vehicle], task: TransportTask) -> Optional[Vehicle]:
-    """
-    根据距离为任务选择最合适的车辆。
-
-    Args:
-        vehicles: 车辆列表
-        task: 待分配的任务，包含起点位置 (start_position)
-
-    Returns:
-        距离最近的空闲车辆，如果没有空闲车辆则返回 None
-    """
-    # 获取任务的起点
-    task_start_x, task_start_y = task.start_position
-
-    # 筛选空闲车辆并计算距离
-    min_distance = float('inf')
-    selected_vehicle = None
-
-    for vehicle in vehicles:
-        # 计算曼哈顿距离
-        vehicle_x, vehicle_y = vehicle.current_position
-        distance = abs(vehicle_x - task_start_x) + abs(vehicle_y - task_start_y)
-
-        # 更新最近车辆
-        if distance < min_distance:
-            min_distance = distance
-            selected_vehicle = vehicle
-
-    return selected_vehicle
 
 
 class Scheduler:
@@ -89,11 +58,13 @@ class Scheduler:
                 cell = self.grid.get_cell(x, row)
                 if cell:
                     cell.grid_type = GRID_TYPE_MAIN_CHANNEL
+                    cell.allowed_directions = ["up", "down", "left", "right"]
         for col in self.grid.main_channel_columns:
             for y in range(self.grid.height):
                 cell = self.grid.get_cell(col, y)
                 if cell:
                     cell.grid_type = GRID_TYPE_MAIN_CHANNEL
+                    cell.allowed_directions = ["up", "down", "left", "right"]
 
         # 设置入口和出口
         self.grid.add_entrance(0, 3)
@@ -131,7 +102,7 @@ class Scheduler:
 
     def initialize(self, seed: Optional[int] = None) -> None:
         """初始化地图、车辆和约束"""
-        self.constraint_manager.set_grid(self.grid)
+        self.constraint_manager.grid = self.grid
 
         # 添加物理约束（禁用点）
         obstacle_positions = [(x, y) for (x, y), cell in self.grid.cells.items() if
@@ -139,14 +110,17 @@ class Scheduler:
         physical_constraint = PhysicalConstraint(obstacle_positions)
         self.constraint_manager.add_constraint(physical_constraint)
 
-        # 初始化车辆
+        main_channel_positions = []
+        for row in self.grid.main_channel_rows:
+            for x in range(self.grid.width):
+                pos = (x, row)
+                main_channel_positions.append(pos)
+ 
+        self.vehicles.clear()
         for i in range(self.num_vehicles):
-            while True:
-                x = random.randint(0, self.grid.width - 1)
-                y = random.randint(0, self.grid.height - 1)
-                if (x,
-                    y) not in obstacle_positions and y not in self.grid.main_channel_rows and x not in self.grid.main_channel_columns:
-                    break
+            if i >= len(main_channel_positions):
+                raise ValueError("主干道空间不足以顺序放置所有车辆")
+            x, y = main_channel_positions[i]
             vehicle_type = VEHICLE_TYPE_EMPTY
             vehicle = Vehicle(id=f"V{i + 1:03d}", vehicle_type=vehicle_type, task_type=TASK_TYPE_OUTBOUND,
                               current_position=(x, y))
@@ -155,29 +129,37 @@ class Scheduler:
             self.grid_visualizer.add_vehicle(vehicle)
 
     def generate_tasks(self, num_tasks: int) -> None:
-        """生成指定数量的任务"""
+        """根据当前货物情况生成指定数量的任务"""
         entrances = self.grid.get_all_entrances()
         exits = self.grid.get_all_exits()
 
         for _ in range(num_tasks):
             if random.choice([True, False]):
+                # 入库任务：目标格子必须为空
                 entrance = random.choice(entrances)
                 while True:
                     dest_x = random.randint(0, self.grid.width - 1)
                     dest_y = random.randint(0, self.grid.height - 1)
                     cell = self.grid.get_cell(dest_x, dest_y)
-                    if cell and cell.grid_type != "obstacle" and dest_y not in self.grid.main_channel_rows and dest_x not in self.grid.main_channel_columns:
+                    if (cell and cell.grid_type != "obstacle" and
+                        dest_y not in self.grid.main_channel_rows and
+                        dest_x not in self.grid.main_channel_columns and
+                        not cell.has_cargo):
                         break
                 task = self.task_manager.add_task(task_type=TASK_TYPE_INBOUND, start_pos=entrance,
                                                   end_pos=(dest_x, dest_y))
                 self.constraint_manager.add_task(task)
             else:
+                # 出库任务：源格子必须有货物
                 exit_pos = random.choice(exits)
                 while True:
                     src_x = random.randint(0, self.grid.width - 1)
                     src_y = random.randint(0, self.grid.height - 1)
                     cell = self.grid.get_cell(src_x, src_y)
-                    if cell and cell.grid_type != "obstacle" and src_y not in self.grid.main_channel_rows and src_x not in self.grid.main_channel_columns:
+                    if (cell and cell.grid_type != "obstacle" and
+                        src_y not in self.grid.main_channel_rows and
+                        src_x not in self.grid.main_channel_columns and
+                        cell.has_cargo):
                         break
                 task = self.task_manager.add_task(task_type=TASK_TYPE_OUTBOUND, start_pos=(src_x, src_y),
                                                   end_pos=exit_pos)
@@ -215,62 +197,103 @@ class Scheduler:
 
     def assign_and_plan(self) -> str:
         """分配任务并规划路径"""
-        # 无任务
         pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
         if not pending_tasks:
             print("无可分配任务")
             return SYSTEM_STATUS_WORKING
 
-        # 无空闲车
         idle_vehicles = [vehicle for vehicle in self.vehicles if vehicle.status == VEHICLE_STATUS_IDLE]
         if not idle_vehicles:
+            print("无空闲车辆")
             return SYSTEM_STATUS_BUSY
 
-        for task in pending_tasks:
-            # 无空闲车
-            if not idle_vehicles:
-                return SYSTEM_STATUS_BUSY
+        assigned_any = False
 
+        for task in pending_tasks:
+            # 检查入口/出口顺序约束
             is_valid, error_msg = self.constraint_manager.check_entrance_exit_order(task, task.start_position)
             if not is_valid:
                 print(f"任务 {task.id} 无法分配: {error_msg}")
                 continue
 
-            vehicle = assign_vehicle_by_distance(idle_vehicles, task)
-            if vehicle.assign_task(task):
-                path_to_start = self.path_planner.find_path(vehicle, vehicle.current_position, task.start_position)
-                if path_to_start == None:
-                    print(f"无法分配任务")
-                vehicle.set_path(path_to_start)
-                vehicle.start_task()
-                idle_vehicles.remove(vehicle)
-                print(f"任务 {task.id} 已分配给车辆 {vehicle.id}, 路径: {vehicle.get_path_str()}")
-                continue
+            # 按距离排序所有空闲车辆
+            sorted_vehicles = sorted(
+                idle_vehicles,
+                key=lambda v: abs(v.current_position[0] - task.start_position[0]) + abs(v.current_position[1] - task.start_position[1])
+            )
 
-        return SYSTEM_STATUS_WORKING
+            for vehicle in sorted_vehicles:
+                # 规划路径（先到任务起点）
+                path_to_start = self.path_planner.find_path(vehicle, vehicle.current_position, task.start_position)
+                if path_to_start is None:
+                    continue  # 该车无法到达，尝试下一个
+
+                # 分配任务和路径
+                if vehicle.assign_task(task):
+                    vehicle.set_path(path_to_start)
+                    vehicle.start_task()
+                    vehicle.status = VEHICLE_STATUS_LOADING
+                    idle_vehicles.remove(vehicle)
+                    self.constraint_manager.add_task(task)  # 启动任务后加入约束管理
+                    assigned_any = True
+                    print(f"任务 {task.id} 已分配给车辆 {vehicle.id}, 路径: {vehicle.get_path_str()}")
+                    break  # 该任务已分配，跳出车辆循环
+
+            else:
+                print(f"任务 {task.id} 暂无可用车辆或所有车辆均无法到达")
+
+        if assigned_any:
+            return SYSTEM_STATUS_WORKING
+        else:
+            return SYSTEM_STATUS_BUSY
 
     def simulate_step(self) -> bool:
         """模拟一步，更新车辆位置"""
-        active_vehicles = [v for v in self.vehicles if v.status == VEHICLE_STATUS_MOVING]
+        active_vehicles = [v for v in self.vehicles if v.status in (VEHICLE_STATUS_MOVING, VEHICLE_STATUS_LOADING, VEHICLE_STATUS_UNLOADING)]
         if not active_vehicles:
             return False
 
         for vehicle in active_vehicles:
             next_pos = vehicle.get_next_position()
-            if not next_pos:
-                if vehicle.current_position == vehicle.current_task.start_position:
-                    path_to_end = self.path_planner.find_path(vehicle, vehicle.current_position, vehicle.current_task.end_position)
-                    vehicle.set_path(path_to_end)
-                    vehicle.start_task()
-                else:
-                    vehicle.complete_task()
-                    self.constraint_manager.remove_task(vehicle.current_task)
+            if next_pos:
+                # 正常移动
+                vehicle.current_path_index += 1
+                vehicle.update_position(next_pos)
                 continue
-            vehicle.current_path_index += 1
-            vehicle.update_position(next_pos)
-            if vehicle.is_at_target():
+
+            # 路径已走完，判断当前阶段
+            task = vehicle.current_task
+            if not task:
+                continue
+
+            if vehicle.current_position == task.start_position and vehicle.status == VEHICLE_STATUS_LOADING:
+                # 到达起点，准备去终点
+                if task.task_type == TASK_TYPE_OUTBOUND:
+                    self.grid.set_cargo(*task.start_position, False)
+                    vehicle.vehicle_type = VEHICLE_TYPE_LOADED
+                elif task.task_type == TASK_TYPE_INBOUND:
+                    vehicle.vehicle_type = VEHICLE_TYPE_LOADED
+                # 规划去终点路径
+                path_to_end = self.path_planner.find_path(vehicle, vehicle.current_position, task.end_position)
+                if path_to_end:
+                    vehicle.set_path(path_to_end)
+                    vehicle.status = VEHICLE_STATUS_UNLOADING
+                else:
+                    print(f"车辆 {vehicle.id} 无法从起点到终点")
+                    vehicle.complete_task()
+                    self.constraint_manager.remove_task(task)
+                continue
+
+            if vehicle.current_position == task.end_position and vehicle.status == VEHICLE_STATUS_UNLOADING:
+                # 到达终点，完成任务
+                if task.task_type == TASK_TYPE_OUTBOUND:
+                    vehicle.vehicle_type = VEHICLE_TYPE_EMPTY
+                elif task.task_type == TASK_TYPE_INBOUND:
+                    self.grid.set_cargo(*task.end_position, True)
+                    vehicle.vehicle_type = VEHICLE_TYPE_EMPTY
                 vehicle.complete_task()
-                self.constraint_manager.remove_task(vehicle.current_task)
+                self.constraint_manager.remove_task(task)
+                vehicle.status = VEHICLE_STATUS_IDLE
                 print(f"车辆 {vehicle.id} 已完成任务")
         return True
 
@@ -312,5 +335,5 @@ class Scheduler:
 
 if __name__ == "__main__":
     scheduler = Scheduler(num_vehicles=2)
-    # scheduler.run(num_tasks=3, max_steps=10, save_map=True, save_tasks=True)
-    scheduler.run(num_tasks=0, max_steps=30, save_map=False, save_tasks=False)
+    # scheduler.run(num_tasks=3, max_steps=100, save_map=True, save_tasks=True)
+    scheduler.run(num_tasks=0, max_steps=100, save_map=False, save_tasks=False)

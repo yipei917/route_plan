@@ -270,6 +270,12 @@ class Vehicle:
             "start_time": task.created_at.isoformat(),
             "end_time": datetime.now().isoformat() if task.status in ["completed", "failed"] else None
         } for task in self.task_history]
+    
+    def get_path_str(self) -> str:
+        """返回当前路径的字符串表示"""
+        if not self.path:
+            return ""
+        return " -> ".join(f"({x},{y})" for x, y in self.path)
 
     def __str__(self) -> str:
         """String representation of the vehicle"""

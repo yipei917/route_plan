@@ -1,18 +1,38 @@
-import heapq
 from typing import List, Tuple, Optional, Dict, Set
-from .base import PathPlanner
+from src.models.grid import Grid
 from src.models.vehicle import Vehicle
+from src.models.constraints import ConstraintManager
+import heapq
 
-class AStarPlanner(PathPlanner):
-    """A*路径规划器"""
-    def __init__(self, grid, constraint_manager, occupied_grids=None):
-        super().__init__(grid, constraint_manager)
-        self.occupied_grids = occupied_grids if occupied_grids is not None else set()
+class AStarPlanner:
+    def __init__(self, grid: Grid, constraint_manager: ConstraintManager):
+        self.grid = grid
+        self.constraint_manager = constraint_manager
 
-    def is_valid_position(self, position, vehicle):
-        if self.occupied_grids and position in self.occupied_grids:
+    @staticmethod
+    def calculate_distance(pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
+        """曼哈顿距离"""
+        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+
+    @staticmethod
+    def reconstruct_path(came_from: dict, current: Tuple[int, int]) -> List[Tuple[int, int]]:
+        """重建路径"""
+        path = [current]
+        while current in came_from:
+            current = came_from[current]
+            path.append(current)
+        return list(reversed(path))
+
+    def is_valid_position(self, position: Tuple[int, int], vehicle: Vehicle) -> bool:
+        """检查位置是否有效"""
+        if not (0 <= position[0] < self.grid.width and 0 <= position[1] < self.grid.height):
             return False
-        return super().is_valid_position(position, vehicle)
+        return self.constraint_manager.check_all_constraints(self.grid, vehicle, position)
+
+    def get_valid_neighbors(self, position: Tuple[int, int], vehicle: Vehicle) -> List[Tuple[int, int]]:
+        """获取有效的相邻位置"""
+        neighbors = self.grid.get_neighbors(position[0], position[1], vehicle.is_empty())
+        return [n for n in neighbors if self.is_valid_position(n, vehicle)]
 
     def find_path(
         self,
@@ -20,55 +40,32 @@ class AStarPlanner(PathPlanner):
         start: Tuple[int, int],
         goal: Tuple[int, int]
     ) -> Optional[List[Tuple[int, int]]]:
-        """使用A*算法寻找从起点到终点的路径"""
-        # 初始化开放列表和关闭列表
-        open_set: List[Tuple[float, int, Tuple[int, int]]] = []  # (f_score, counter, position)
+        """A*算法寻找路径"""
+        open_set: List[Tuple[float, int, Tuple[int, int]]] = []
         closed_set: Set[Tuple[int, int]] = set()
-        counter = 0  # 用于在f_score相同时比较位置
+        counter = 0
 
-        # 初始化距离字典
-        g_score: Dict[Tuple[int, int], float] = {start: 0}  # 从起点到当前点的实际距离
-        f_score: Dict[Tuple[int, int], float] = {start: self.calculate_distance(start, goal)}  # 估计的总距离
-        came_from: Dict[Tuple[int, int], Tuple[int, int]] = {}  # 记录路径
+        g_score: Dict[Tuple[int, int], float] = {start: 0}
+        f_score: Dict[Tuple[int, int], float] = {start: self.calculate_distance(start, goal)}
+        came_from: Dict[Tuple[int, int], Tuple[int, int]] = {}
 
-        # 将起点加入开放列表
         heapq.heappush(open_set, (f_score[start], counter, start))
         counter += 1
 
         while open_set:
-            # 获取f_score最小的节点
-            current_f, _, current = heapq.heappop(open_set)
-
-            # 如果到达目标点，重建并返回路径
+            _, _, current = heapq.heappop(open_set)
             if current == goal:
                 return self.reconstruct_path(came_from, current)
-
-            # 将当前节点加入关闭列表
             closed_set.add(current)
-
-            # 遍历相邻节点
             for neighbor in self.get_valid_neighbors(current, vehicle):
                 if neighbor in closed_set:
                     continue
-
-                # 计算从起点经过当前节点到相邻节点的距离
-                tentative_g_score = g_score[current] + self.calculate_distance(current, neighbor)
-
-                # 如果是新节点或找到更好的路径
-                if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
-                    # 更新路径信息
+                tentative_g = g_score[current] + self.calculate_distance(current, neighbor)
+                if neighbor not in g_score or tentative_g < g_score[neighbor]:
                     came_from[neighbor] = current
-                    g_score[neighbor] = tentative_g_score
-                    f_score[neighbor] = tentative_g_score + self.calculate_distance(neighbor, goal)
-
-                    # 将相邻节点加入开放列表
+                    g_score[neighbor] = tentative_g
+                    f_score[neighbor] = tentative_g + self.calculate_distance(neighbor, goal)
                     if not any(neighbor == pos for _, _, pos in open_set):
                         heapq.heappush(open_set, (f_score[neighbor], counter, neighbor))
                         counter += 1
-
-        # 如果没有找到路径，返回None
         return None
-
-    def calculate_heuristic(self, pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
-        """计算启发式函数值（曼哈顿距离）"""
-        return self.calculate_distance(pos1, pos2) 

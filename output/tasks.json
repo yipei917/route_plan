@@ -1,0 +1,47 @@
+[
+  {
+    "id": "T001",
+    "task_type": "outbound",
+    "start_position": [
+      6,
+      4
+    ],
+    "end_position": [
+      10,
+      3
+    ],
+    "priority": 0,
+    "created_at": "2025-05-25T22:57:29.898188",
+    "status": "pending"
+  },
+  {
+    "id": "T002",
+    "task_type": "inbound",
+    "start_position": [
+      0,
+      3
+    ],
+    "end_position": [
+      9,
+      5
+    ],
+    "priority": 0,
+    "created_at": "2025-05-25T22:57:29.898195",
+    "status": "pending"
+  },
+  {
+    "id": "T003",
+    "task_type": "inbound",
+    "start_position": [
+      0,
+      7
+    ],
+    "end_position": [
+      6,
+      10
+    ],
+    "priority": 0,
+    "created_at": "2025-05-25T22:57:29.898198",
+    "status": "pending"
+  }
+]

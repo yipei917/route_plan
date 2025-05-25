@@ -1,414 +1,204 @@
-from typing import Optional, Tuple, List
-from dataclasses import dataclass
-from datetime import datetime
-from .task import TransportTask
+from abc import ABC, abstractmethod
+from typing import List, Tuple, Dict
+from .grid import Grid, GRID_TYPE_OBSTACLE, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL
+from .vehicle import Vehicle, VEHICLE_STATUS_WAITING
 
-# 使用字符串常量替代枚举
-VEHICLE_TYPE_EMPTY = "empty"
-VEHICLE_TYPE_LOADED = "loaded"
 
-TASK_TYPE_INBOUND = "inbound"
-TASK_TYPE_OUTBOUND = "outbound"
+class Constraint(ABC):
+    """约束条件基类"""
 
-VEHICLE_STATUS_IDLE = "idle"
-VEHICLE_STATUS_MOVING = "moving"
-VEHICLE_STATUS_LOADING = "loading"
-VEHICLE_STATUS_UNLOADING = "unloading"
-VEHICLE_STATUS_WAITING = "waiting"
-VEHICLE_STATUS_ERROR = "error"
+    @abstractmethod
+    def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
+        """检查约束条件是否满足"""
+        pass
 
-@dataclass
-class Vehicle:
-    """Vehicle class"""
-    id: str
-    vehicle_type: str
-    task_type: str
-    current_position: Tuple[int, int]
-    target_position: Optional[Tuple[int, int]] = None
-    status: str = VEHICLE_STATUS_IDLE
-    path: List[Tuple[int, int]] = None
-    priority: int = 0  # Priority, higher number means higher priority
-    waiting_position: Optional[Tuple[int, int]] = None  # Waiting position for avoidance
-    waiting_for: Optional[str] = None  # ID of the vehicle being waited for
-    current_task: Optional[TransportTask] = None
-    task_history: List[TransportTask] = None
-    last_update_time = datetime.now()
-    current_path_index = 0
-    need_replan = False  # 是否需要重新规划路径
-    error_message: Optional[str] = None  # 添加错误信息字段
 
-    def __post_init__(self):
-        if self.path is None:
-            self.path = []
-        if self.task_history is None:
-            self.task_history = []
-        self._update_priority()
+class PhysicalConstraint(Constraint):
+    """物理约束"""
 
-    def _update_priority(self):
-        """更新车辆优先级"""
-        # 基础优先级计算
-        self.priority = 0
-        # 入库任务优先级高于出库任务
-        if self.task_type == TASK_TYPE_INBOUND:
-            self.priority += 2
-        # 满车优先级高于空车
-        if self.vehicle_type == VEHICLE_TYPE_LOADED:
-            self.priority += 1
+    def __init__(self, restricted_positions: List[Tuple[int, int]]):
+        self.restricted_positions = set(restricted_positions)
 
-    def assign_task(self, task: TransportTask) -> bool:
-        """Assign a task to the vehicle"""
-        print(f"\n=== 分配任务 ===")
-        print(f"车辆 {self.id} 当前状态: {self.status}")
-        print(f"任务 {task.id} 当前状态: {task.status}")
-        
-        # 检查车辆状态
-        if self.status != VEHICLE_STATUS_IDLE:
-            print(f"错误：车辆状态不是空闲状态，当前状态: {self.status}")
-            return False
-        
-        if self.current_task:
-            print(f"错误：车辆已有任务 {self.current_task.id}")
-            return False
-        
-        print(f"开始分配任务")
-        try:
-            # 更新任务状态
-            task.assign_to_vehicle(self.id)
-            # 更新车辆状态
-            self.current_task = task
-            self.target_position = task.end_position
-            self._update_priority()
-            print(f"任务分配完成")
-            print(f"车辆状态: {self.status}")
-            print(f"任务状态: {task.status}")
+    def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
+        """检查位置是否在物理限制区域内"""
+        return position not in self.restricted_positions
+
+
+class DirectionConstraint(Constraint):
+    """方向约束"""
+
+    def __init__(self, position: Tuple[int, int], allowed_directions: List[str]):
+        self.position = position
+        self.allowed_directions = allowed_directions
+
+    def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
+        """检查方向约束是否满足"""
+        if position != self.position:
             return True
-        except Exception as e:
-            print(f"分配任务时发生错误: {str(e)}")
-            # 发生错误时恢复状态
-            self.current_task = None
-            self.target_position = None
+
+        cell = grid.get_cell(*position)
+        if not cell:
             return False
 
-    def start_task(self) -> None:
-        """Start executing the current task"""
-        print(f"\n=== 启动任务 ===")
-        print(f"车辆 {self.id} 当前状态: {self.status}")
-        print(f"任务 {self.current_task.id if self.current_task else 'None'} 当前状态: {self.current_task.status if self.current_task else 'None'}")
-        
-        # 检查车辆和任务状态
-        if not self.current_task:
-            print(f"错误：车辆没有当前任务")
-            return
-        
-        if self.status != VEHICLE_STATUS_IDLE:
-            print(f"错误：车辆状态不是空闲状态，当前状态: {self.status}")
-            return
-        
-        if self.current_task.status != "assigned":
-            print(f"错误：任务状态不是已分配状态，当前状态: {self.current_task.status}")
-            return
-        
-        if not self.path:
-            print(f"错误：没有设置路径")
-            return
-        
-        print(f"开始执行任务")
-        try:
-            # 更新任务状态
-            self.current_task.start_execution()
-            # 更新车辆状态
-            self.status = VEHICLE_STATUS_MOVING
-            print(f"任务启动完成")
-            print(f"车辆状态: {self.status}")
-            print(f"任务状态: {self.current_task.status}")
-        except Exception as e:
-            print(f"启动任务时发生错误: {str(e)}")
-            # 发生错误时恢复状态
-            self.status = VEHICLE_STATUS_IDLE
-            if self.current_task:
-                self.current_task.status = "assigned"
+        return all(direction in self.allowed_directions for direction in cell.allowed_directions)
 
-    def complete_task(self) -> None:
-        """Complete the current task"""
-        print(f"\n=== 完成任务 ===")
-        print(f"车辆 {self.id} 当前状态: {self.status}")
-        print(f"任务 {self.current_task.id if self.current_task else 'None'} 当前状态: {self.current_task.status if self.current_task else 'None'}")
-        
-        if self.current_task:
-            print(f"开始完成任务")
-            # 先完成当前任务
-            self.current_task.complete()
-            print(f"任务状态更新为: {self.current_task.status}")
-            
-            # 将任务添加到历史记录
-            self.task_history.append(self.current_task)
-            print(f"任务添加到历史记录")
-            
-            # 清除当前任务相关状态
-            self.current_task = None
-            self.status = VEHICLE_STATUS_IDLE
-            self.target_position = None
-            self.path = []
-            print(f"清除任务相关状态")
-            
-            # 更新优先级
-            self._update_priority()
-            print(f"更新优先级: {self.priority}")
-            
-            # 更新最后更新时间
-            self.last_update_time = datetime.now()
-            print(f"任务完成处理完成")
-            print(f"车辆状态: {self.status}")
 
-    def fail_task(self, error_message: str = None) -> None:
-        """任务失败"""
-        if self.current_task:
-            self.current_task.status = "failed"
-            self.current_task.error_message = error_message
-        self.status = VEHICLE_STATUS_IDLE
-        self.current_task = None
-        self.path = []
-        self.error_message = error_message  # 设置错误信息
+class CargoConstraint(Constraint):
+    """货物约束"""
 
-    def update_position(self, new_position: Tuple[int, int]) -> None:
-        """更新车辆位置 - 仅用于内部状态更新，不用于移动"""
-        print(f"\n=== 更新位置 ===")
-        print(f"车辆 {self.id} 当前位置: {self.current_position}")
-        print(f"新位置: {new_position}")
-        print(f"当前状态: {self.status}")
-        
-        # 直接更新位置
-        self.current_position = new_position
-        self.last_update_time = datetime.now()
-        print(f"位置已更新")
-
-    def set_path(self, path: List[Tuple[int, int]]) -> None:
-        """设置路径"""
-        print(f"\n=== 设置路径 ===")
-        print(f"车辆 {self.id} 当前状态: {self.status}")
-        print(f"当前路径长度: {len(self.path) if self.path else 0}")
-        print(f"新路径长度: {len(path) if path else 0}")
-        
-        if not path:
-            print(f"路径为空，清除路径")
-            self.path = []
-            self.target_position = None
-            self.current_path_index = 0
-            self.need_replan = False
-            return
-
-        self.path = path
-        self.target_position = path[-1]
-        self.current_path_index = 0
-        self.need_replan = False
-        print(f"路径已设置")
-        print(f"目标位置: {self.target_position}")
-        print(f"完整路径: {' -> '.join(str(p) for p in path)}")
-
-    def clear_path(self) -> None:
-        """清除路径"""
-        self.path = None
-        self.current_path_index = 0
-        self.status = VEHICLE_STATUS_IDLE
-        self.need_replan = False
-
-    def set_waiting(self, waiting_position: Tuple[int, int], waiting_for: str) -> None:
-        """设置等待状态"""
-        self.waiting_position = waiting_position
-        self.waiting_for = waiting_for
-        self.status = VEHICLE_STATUS_WAITING
-
-    def is_empty(self) -> bool:
-        """检查是否为空车"""
-        return self.vehicle_type == VEHICLE_TYPE_EMPTY
-
-    def is_at_target(self) -> bool:
-        """检查是否到达目标位置"""
-        if not self.current_task:
+    def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
+        """检查货物约束是否满足"""
+        cell = grid.get_cell(*position)
+        if not cell:
             return False
-        return self.current_position == self.current_task.end_position
 
-    def get_next_position(self) -> Optional[Tuple[int, int]]:
-        """获取下一个位置"""
-        if self.current_path_index >= len(self.path):
-            return None
+        # 满车不能通过有货物的格子
+        if not vehicle.is_empty() and cell.has_cargo:
+            return False
+
+        return True
+
+
+class ChannelConstraint(Constraint):
+    """通道约束"""
+
+    def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
+        """检查通道约束是否满足"""
+        cell = grid.get_cell(*position)
+        if not cell:
+            return False
+
+        # 检查格子类型
+        if cell.grid_type == GRID_TYPE_OBSTACLE:
+            return False
+
+        if cell.grid_type == GRID_TYPE_MAIN_CHANNEL:
+            # 主通道允许所有车辆通过
+            return True
+
+        if cell.grid_type == GRID_TYPE_NORMAL_CHANNEL:
+            # 普通通道，空车可以穿行，满车不能通过有货物的格子
+            if vehicle.is_empty():
+                return True
+            return not cell.has_cargo
+
+        return False
+
+
+class VehicleConflictConstraint(Constraint):
+    """车辆冲突约束"""
+
+    def __init__(self):
+        self.vehicles: Dict[str, Vehicle] = {}  # 车辆ID到车辆对象的映射
+        self.occupied_positions: Dict[Tuple[int, int], str] = {}  # 位置到车辆ID的映射
+        self.active_paths: Dict[str, List[Tuple[int, int]]] = {}  # 车辆ID到活动路径的映射
+
+    def add_vehicle(self, vehicle: Vehicle) -> None:
+        """添加车辆到约束系统"""
+        self.vehicles[vehicle.id] = vehicle
+        if vehicle.path:
+            self.active_paths[vehicle.id] = vehicle.path
+        self._update_occupied_positions()
+
+    def remove_vehicle(self, vehicle_id: str) -> None:
+        """从约束系统中移除车辆"""
+        if vehicle_id in self.vehicles:
+            del self.vehicles[vehicle_id]
+            if vehicle_id in self.active_paths:
+                del self.active_paths[vehicle_id]
+            self._update_occupied_positions()
+
+    def _update_occupied_positions(self) -> None:
+        """更新被占用的位置：将所有车辆的整条路径都视为占用"""
+        self.occupied_positions.clear()
+        for vehicle in self.vehicles.values():
+            if vehicle.status != VEHICLE_STATUS_WAITING and vehicle.path:
+                for pos in vehicle.path:
+                    self.occupied_positions[pos] = vehicle.id
+            elif vehicle.status != VEHICLE_STATUS_WAITING:
+                # 如果没有路径，只占当前位置
+                self.occupied_positions[vehicle.current_position] = vehicle.id
+
+    def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
+        """检查位置是否会发生冲突"""
+        return position not in self.occupied_positions
+
+
+class ConstraintManager:
+    """约束管理器"""
+
+    def __init__(self):
+        self.constraints: List[Constraint] = []
+        self.vehicle_conflict_constraint = VehicleConflictConstraint()
+        self.add_constraint(self.vehicle_conflict_constraint)
+        self.vehicles = []
+        self.grid = None
+        self.entrance_tasks = {}  # 记录每个入口的任务队列
+        self.exit_tasks = {}  # 记录每个出口的任务队列
+
+    def add_constraint(self, constraint: Constraint) -> None:
+        """添加约束"""
+        self.constraints.append(constraint)
+
+    def remove_constraint(self, constraint: Constraint) -> None:
+        """移除约束"""
+        if constraint in self.constraints:
+            self.constraints.remove(constraint)
+
+    def check_all_constraints(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
+        """检查所有约束条件，包括车辆冲突约束"""
+        # 先检查所有通用约束
+        basic_ok = all(constraint.check(grid, vehicle, position) for constraint in self.constraints)
+        # 再单独检查车辆冲突约束（可选，防止被遗漏或被移除）
+        vehicle_ok = self.vehicle_conflict_constraint.check(grid, vehicle, position)
+        return basic_ok and vehicle_ok
+
+    def add_vehicle(self, vehicle: Vehicle) -> None:
+        """添加车辆到约束系统"""
+        self.vehicle_conflict_constraint.add_vehicle(vehicle)
+        if vehicle not in self.vehicles:
+            self.vehicles.append(vehicle)
+
+    def remove_vehicle(self, vehicle_id: str) -> None:
+        """从约束系统中移除车辆"""
+        self.vehicle_conflict_constraint.remove_vehicle(vehicle_id)
+        self.vehicles = [v for v in self.vehicles if v.id != vehicle_id]
+
+    def get_conflicting_vehicles(self, vehicle: Vehicle) -> List[Vehicle]:
+        """获取与指定车辆发生冲突的所有车辆"""
+        return self.vehicle_conflict_constraint.get_conflicting_vehicles(vehicle)
+
+    def add_task(self, task):
+        """添加任务到相应的队列"""
+        if task.task_type == "inbound":
+            # 入库任务添加到入口队列
+            if task.start_position in self.entrance_tasks:
+                self.entrance_tasks[task.start_position].append(task)
         else:
-            return self.path[self.current_path_index] if self.path else None
+            # 出库任务添加到出口队列
+            if task.end_position in self.exit_tasks:
+                self.exit_tasks[task.end_position].append(task)
 
-    def has_higher_priority_than(self, other: 'Vehicle') -> bool:
-        """检查是否比另一辆车优先级高"""
-        return self.priority > other.priority
+    def check_entrance_exit_order(self, task, position):
+        """检查入口/出口的任务顺序约束"""
+        if task.task_type == "inbound":
+            # 检查入库任务是否按顺序执行
+            entrance_tasks = self.entrance_tasks.get(task.start_position, [])
+            if entrance_tasks and task != entrance_tasks[0]:
+                return False, f"入口 {task.start_position} 的任务必须按顺序执行，当前任务不是队列中的第一个任务"
+        else:
+            # 检查出库任务是否按顺序执行
+            exit_tasks = self.exit_tasks.get(task.end_position, [])
+            if exit_tasks and task != exit_tasks[0]:
+                return False, f"出口 {task.end_position} 的任务必须按顺序执行，当前任务不是队列中的第一个任务"
+        return True, None
 
-    def get_priority(self) -> int:
-        """获取车辆优先级"""
-        return self.priority
-
-    def get_task_type(self) -> str:
-        """获取车辆任务类型"""
-        return self.task_type
-
-    def get_status(self) -> str:
-        """获取车辆状态"""
-        return self.status
-
-    def get_waiting_position(self) -> Optional[Tuple[int, int]]:
-        """获取等待位置"""
-        return self.waiting_position
-
-    def get_waiting_for(self) -> Optional[str]:
-        """获取等待的车辆ID"""
-        return self.waiting_for
-
-    def get_current_position(self) -> Tuple[int, int]:
-        """获取车辆当前位置"""
-        return self.current_position
-
-    def get_target_position(self) -> Optional[Tuple[int, int]]:
-        """获取车辆目标位置"""
-        return self.target_position
-
-    def get_path(self) -> List[Tuple[int, int]]:
-        """获取车辆路径"""
-        return self.path
-
-    def get_priority_str(self) -> str:
-        """获取优先级字符串表示"""
-        return str(self.priority)
-
-    def get_task_type_str(self) -> str:
-        """获取任务类型字符串表示"""
-        return self.task_type
-
-    def get_status_str(self) -> str:
-        """获取状态字符串表示"""
-        return self.status
-
-    def get_waiting_position_str(self) -> Optional[str]:
-        """获取等待位置字符串表示"""
-        return str(self.waiting_position) if self.waiting_position else None
-
-    def get_waiting_for_str(self) -> Optional[str]:
-        """获取等待的车辆ID字符串表示"""
-        return self.waiting_for if self.waiting_for else None
-
-    def get_current_position_str(self) -> str:
-        """获取当前位置字符串表示"""
-        return f"({self.current_position[0]}, {self.current_position[1]})"
-
-    def get_target_position_str(self) -> Optional[str]:
-        """获取目标位置字符串表示"""
-        return f"({self.target_position[0]}, {self.target_position[1]})" if self.target_position else None
-
-    def get_path_str(self) -> str:
-        """获取路径字符串表示"""
-        return " -> ".join(f"({x}, {y})" for x, y in self.path)
-
-    def get_priority_str_with_task_type(self) -> str:
-        """获取优先级和任务类型字符串表示"""
-        return f"{self.priority} ({self.task_type})"
-
-    def get_status_with_task_type(self) -> str:
-        """获取状态和任务类型字符串表示"""
-        return f"{self.status} ({self.task_type})"
-
-    def get_waiting_position_with_waiting_for(self) -> Optional[str]:
-        """获取等待位置和等待的车辆ID字符串表示"""
-        return f"{self.waiting_position} -> {self.waiting_for}" if self.waiting_position and self.waiting_for else None
-
-    def get_current_position_with_waiting_position(self) -> str:
-        """获取当前位置和等待位置字符串表示"""
-        return f"{self.current_position} -> {self.waiting_position}" if self.waiting_position else f"{self.current_position}"
-
-    def get_target_position_with_waiting_position(self) -> Optional[str]:
-        """获取目标位置和等待位置字符串表示"""
-        return f"{self.target_position} -> {self.waiting_position}" if self.target_position and self.waiting_position else None
-
-    def get_path_with_waiting_position(self) -> List[Tuple[int, int]]:
-        """获取带等待位置的路径"""
-        return [*self.path, self.waiting_position] if self.waiting_position else self.path
-
-    def get_path_with_waiting_for(self) -> List[Tuple[int, int]]:
-        """获取带等待的车辆ID的路径"""
-        return [*self.path, self.waiting_for] if self.waiting_for else self.path
-
-    def get_path_with_waiting_position_and_waiting_for(self) -> List[Tuple[int, int]]:
-        """获取带等待位置和等待的车辆ID的路径"""
-        return [*self.path, self.waiting_position, self.waiting_for] if self.waiting_position and self.waiting_for else self.path
-
-    def get_path_with_waiting_position_and_waiting_for_str(self) -> str:
-        """获取带等待位置和等待的车辆ID的路径字符串表示"""
-        return " -> ".join(f"({x}, {y})" for x, y in self.get_path_with_waiting_position_and_waiting_for())
-
-    def get_path_with_waiting_position_and_waiting_for_str_with_priority(self) -> str:
-        """获取带等待位置和等待的车辆ID的路径字符串表示，包括优先级"""
-        return f"{self.get_path_with_waiting_position_and_waiting_for_str()} ({self.priority})"
-
-    def get_path_with_waiting_position_and_waiting_for_str_with_task_type(self) -> str:
-        """获取带等待位置和等待的车辆ID的路径字符串表示，包括任务类型"""
-        return f"{self.get_path_with_waiting_position_and_waiting_for_str()} ({self.task_type})"
-
-    def get_path_with_waiting_position_and_waiting_for_str_with_status(self) -> str:
-        """获取带等待位置和等待的车辆ID的路径字符串表示，包括状态"""
-        return f"{self.get_path_with_waiting_position_and_waiting_for_str()} ({self.status})"
-
-    def get_path_with_waiting_position_and_waiting_for_str_with_priority_and_task_type(self) -> str:
-        """获取带等待位置和等待的车辆ID的路径字符串表示，包括优先级和任务类型"""
-        return f"{self.get_path_with_waiting_position_and_waiting_for_str()} ({self.priority} {self.task_type})"
-
-    def get_path_with_waiting_position_and_waiting_for_str_with_priority_and_status(self) -> str:
-        """获取带等待位置和等待的车辆ID的路径字符串表示，包括优先级和状态"""
-        return f"{self.get_path_with_waiting_position_and_waiting_for_str()} ({self.priority} {self.status})"
-
-    def get_path_with_waiting_position_and_waiting_for_str_with_priority_and_task_type_and_status(self) -> str:
-        """获取带等待位置和等待的车辆ID的路径字符串表示，包括优先级、任务类型和状态"""
-        return f"{self.get_path_with_waiting_position_and_waiting_for_str()} ({self.priority} {self.task_type} {self.status})"
-
-    def get_current_task_info(self) -> dict:
-        """Get current task information"""
-        if not self.current_task:
-            return {
-                "task_id": None,
-                "task_type": None,
-                "status": None,
-                "progress": None
-            }
-            
-        return {
-            "task_id": self.current_task.id,
-            "task_type": self.current_task.task_type,
-            "status": self.current_task.status,
-            "progress": self._calculate_progress()
-        }
-
-    def _calculate_progress(self) -> float:
-        """Calculate task progress (0-100%)"""
-        if not self.path or not self.current_task:
-            return 0.0
-            
-        total_distance = len(self.path)
-        if total_distance == 0:
-            return 100.0
-            
-        current_index = self.path.index(self.current_position) if self.current_position in self.path else 0
-        return (current_index / total_distance) * 100
-
-    def get_task_history(self) -> List[dict]:
-        """Get task history"""
-        return [{
-            "task_id": task.id,
-            "task_type": task.task_type,
-            "status": task.status,
-            "start_time": task.created_at.isoformat(),
-            "end_time": datetime.now().isoformat() if task.status in ["completed", "failed"] else None
-        } for task in self.task_history]
-
-    def __str__(self) -> str:
-        """String representation of the vehicle"""
-        return (f"Vehicle {self.id} ({self.vehicle_type}, {self.task_type}) - "
-                f"Status: {self.status}, Priority: {self.priority}")
-
-    def reset_error(self) -> None:
-        """重置错误状态"""
-        self.error_message = None
-        if self.current_task:
-            self.current_task.error_message = None 
+    def remove_task(self, task):
+        """从队列中移除已完成的任务"""
+        if task.task_type == "inbound":
+            if task.start_position in self.entrance_tasks:
+                self.entrance_tasks[task.start_position] = [t for t in self.entrance_tasks[task.start_position] if
+                                                            t.id != task.id]
+        else:
+            if task.end_position in self.exit_tasks:
+                self.exit_tasks[task.end_position] = [t for t in self.exit_tasks[task.end_position] if t.id != task.id]

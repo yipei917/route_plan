@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from typing import List, Tuple, Dict, Optional
-from src.models.grid import Grid, GRID_TYPE_NORMAL_CHANNEL, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE, GRID_TYPE_FIRE_RESTRICTED, GRID_TYPE_COLUMN
+from src.models.grid import Grid, GRID_TYPE_NORMAL_CHANNEL, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE
 from src.models.vehicle import Vehicle
 
 class GridVisualizer:
@@ -16,8 +16,6 @@ class GridVisualizer:
             GRID_TYPE_NORMAL_CHANNEL: 'white',
             GRID_TYPE_MAIN_CHANNEL: 'lightgray',
             GRID_TYPE_OBSTACLE: 'black',
-            GRID_TYPE_FIRE_RESTRICTED: 'red',
-            GRID_TYPE_COLUMN: 'gray'
         }
         
         # 设置车辆颜色
