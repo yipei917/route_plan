@@ -5,8 +5,7 @@ import json
 import os
 from .models.grid import Grid, GridCell, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE
 from .models.task import TaskManager, TransportTask, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TASK_STATUS_PENDING
-from .models.vehicle import Vehicle, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, \
-    VEHICLE_STATUS_IDLE, VEHICLE_STATUS_MOVING, VEHICLE_STATUS_LOADING, VEHICLE_STATUS_UNLOADING, VEHICLE_STATUS_WAITING
+from .models.vehicle import Vehicle, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, VEHICLE_STATUS_IDLE, VEHICLE_STATUS_MOVING, VEHICLE_STATUS_LOADING, VEHICLE_STATUS_UNLOADING, VEHICLE_STATUS_WAITING
 from .models.constraints import ConstraintManager, PhysicalConstraint
 from .algorithms.a_star import AStarPlanner
 from .utils.visualizer import GridVisualizer
@@ -35,8 +34,8 @@ class Scheduler:
             random.seed(seed)
 
         # 重置网格
-        self.grid.width = 11
-        self.grid.height = 11
+        self.grid.width = 10
+        self.grid.height = 10
         self.grid.cells.clear()
         self.grid.entrances.clear()
         self.grid.exits.clear()
@@ -49,8 +48,8 @@ class Scheduler:
                 self.grid.cells[(x, y)] = GridCell(x, y)
 
         # 设置主干道：横向行2，纵向列2
-        self.grid.main_channel_rows = [3, 7]
-        self.grid.main_channel_columns = [3, 7]
+        self.grid.main_channel_rows = [0, 3, 6, 9]
+        self.grid.main_channel_columns = [0, 3, 6, 9]
 
         # 标记主干道
         for row in self.grid.main_channel_rows:
@@ -67,10 +66,14 @@ class Scheduler:
                     cell.allowed_directions = ["up", "down", "left", "right"]
 
         # 设置入口和出口
+        self.grid.add_entrance(0, 0)
         self.grid.add_entrance(0, 3)
-        self.grid.add_entrance(0, 7)
-        self.grid.add_exit(10, 3)
-        self.grid.add_exit(10, 7)
+        self.grid.add_entrance(0, 6)
+        self.grid.add_entrance(0, 9)
+        self.grid.add_exit(9, 0)
+        self.grid.add_exit(9, 3)
+        self.grid.add_exit(9, 6)
+        self.grid.add_exit(9, 9)
 
         restricted_positions = set()  # 入口和出口
         for row in self.grid.main_channel_rows:
@@ -79,7 +82,8 @@ class Scheduler:
         for col in self.grid.main_channel_columns:
             for y in range(self.grid.height):
                 restricted_positions.add((col, y))
-        obstacle_positions = {(1, 1), (1, 9), (9, 1), (9, 9)}
+        # obstacle_positions = {(1, 1), (1, 9), (9, 1), (9, 9)}
+        obstacle_positions = {}
         for x, y in obstacle_positions:
             if (x, y) not in restricted_positions:
                 cell = self.grid.get_cell(x, y)
@@ -120,8 +124,7 @@ class Scheduler:
                 raise ValueError("主干道空间不足以顺序放置所有车辆")
             x, y = main_channel_positions[i]
             vehicle_type = VEHICLE_TYPE_EMPTY
-            vehicle = Vehicle(id=f"V{i + 1:03d}", vehicle_type=vehicle_type, task_type=TASK_TYPE_OUTBOUND,
-                              current_position=(x, y))
+            vehicle = Vehicle(id=f"V{i + 1:03d}", vehicle_type=vehicle_type, current_position=(x, y))
             self.vehicles.append(vehicle)
             self.constraint_manager.add_vehicle(vehicle)
             self.grid_visualizer.add_vehicle(vehicle)
@@ -263,19 +266,18 @@ class Scheduler:
                 elif task.task_type == TASK_TYPE_INBOUND:
                     vehicle.vehicle_type = VEHICLE_TYPE_LOADED
                 # 规划去终点路径
+                self.constraint_manager.remove_path(vehicle)
                 path_to_end = self.path_planner.find_path(vehicle, vehicle.current_position, task.end_position)
                 if path_to_end:
                     vehicle.set_path(path_to_end)
                     vehicle.status = VEHICLE_STATUS_UNLOADING
-                    self.constraint_manager.remove_path(vehicle)
                     self.constraint_manager.add_path(vehicle, path_to_end)
                 else:
-                    print(f"车辆 {vehicle.id} 无法从起点到终点")
+                    print(f"车辆 {vehicle.id} 无法从起点{vehicle.current_position}到终点{task.end_position}，任务无法完成")
+                    vehicle.set_waiting()
                     vehicle.status = VEHICLE_STATUS_WAITING
-                    self.constraint_manager.remove_path(vehicle)
-                continue
 
-            if vehicle.current_position == task.end_position:
+            elif vehicle.current_position == task.end_position:
                 # 到达终点，完成任务
                 if task.task_type == TASK_TYPE_OUTBOUND:
                     vehicle.vehicle_type = VEHICLE_TYPE_EMPTY
@@ -290,7 +292,7 @@ class Scheduler:
 
     def visualize(self, filename: str) -> None:
         """可视化当前状态，保存到output目录"""
-        self.grid_visualizer.draw_grid()
+        self.grid_visualizer.draw_grid(self.constraint_manager)
         self.grid_visualizer.draw_vehicles()
         full_path = os.path.join(self.output_dir, filename)
         self.grid_visualizer.save(full_path)
@@ -320,7 +322,7 @@ class Scheduler:
             if not self.simulate_step():
                 print("没有活动车辆，模拟结束")
                 break
-            self.visualize(f"step_{step}.png")
+            # self.visualize(f"step_{step}.png")
             step += 1
 
 

@@ -96,26 +96,22 @@ class VehicleConflictConstraint(Constraint):
     def add_vehicle(self, vehicle: Vehicle) -> None:
         """添加车辆到约束系统"""
         self.vehicles[vehicle.id] = vehicle
-        if vehicle.path:
-            self.active_paths[vehicle.id] = vehicle.path
         self._update_occupied_positions()
 
     def remove_vehicle(self, vehicle_id: str) -> None:
         """从约束系统中移除车辆"""
         if vehicle_id in self.vehicles:
             del self.vehicles[vehicle_id]
-            if vehicle_id in self.active_paths:
-                del self.active_paths[vehicle_id]
             self._update_occupied_positions()
 
     def _update_occupied_positions(self) -> None:
         """更新被占用的位置：将所有车辆的整条路径都视为占用"""
         self.occupied_positions.clear()
         for vehicle in self.vehicles.values():
-            if vehicle.status != VEHICLE_STATUS_WAITING and vehicle.path:
+            if vehicle.path:
                 for pos in vehicle.path:
                     self.occupied_positions[pos] = vehicle.id
-            elif vehicle.status != VEHICLE_STATUS_WAITING:
+            else:
                 # 如果没有路径，只占当前位置
                 self.occupied_positions[vehicle.current_position] = vehicle.id
 
@@ -135,6 +131,9 @@ class VehicleConflictConstraint(Constraint):
         """从约束系统中移除指定车辆的路径"""
         if vehicle.id in self.active_paths:
             del self.active_paths[vehicle.id]
+        else:
+            print(self.active_paths)
+            print(f"车辆 {vehicle.id} 没有活动路径，无法移除路径")
         self._update_occupied_positions()
 
 class ConstraintManager:

@@ -45,50 +45,71 @@ class GridVisualizer:
         """添加车辆到可视化器"""
         self.vehicles.append(vehicle)
     
-    def draw_grid(self) -> None:
-        """绘制网格"""
-        # 清除当前图形
+    def draw_grid(self, constraint_manager=None) -> None:
+        """绘制网格，车辆占用块染色并显示图例"""
         self.ax.clear()
-        
-        # 设置坐标轴
         self.ax.set_xlim(-0.5, self.grid.width - 0.5)
         self.ax.set_ylim(-0.5, self.grid.height - 0.5)
         self.ax.set_xticks(range(self.grid.width))
         self.ax.set_yticks(range(self.grid.height))
         self.ax.grid(True)
-        
+
+        # 车辆占用块染色准备
+        cmap = plt.get_cmap('tab20')
+        vehicle_ids = [v.id for v in self.vehicles]
+        color_map = {vid: cmap(i % 20) for i, vid in enumerate(vehicle_ids)}
+        legend_elements = []
+
+        # 获取占用信息
+        occupied_positions = {}
+        if constraint_manager is not None:
+            occupied_positions = getattr(constraint_manager.vehicle_conflict_constraint, "occupied_positions", {})
+
         # 绘制每个格子
         for y in range(self.grid.height):
             for x in range(self.grid.width):
                 cell = self.grid.get_cell(x, y)
-                if cell:
-                    # 绘制格子背景
-                    rect = patches.Rectangle(
-                        (x - 0.5, y - 0.5), 1, 1,
-                        facecolor=self.grid_type_colors.get(cell.grid_type, 'white'),
-                        edgecolor='black'
+                pos = (x, y)
+                # 默认背景色
+                facecolor = self.grid_type_colors.get(cell.grid_type, 'white') if cell else 'white'
+                edgecolor = 'black'
+                # 如果被车辆占用，染色
+                if pos in occupied_positions:
+                    vid = occupied_positions[pos]
+                    facecolor = color_map.get(vid, 'yellow')
+                rect = patches.Rectangle(
+                    (x - 0.5, y - 0.5), 1, 1,
+                    facecolor=facecolor,
+                    edgecolor=edgecolor
+                )
+                self.ax.add_patch(rect)
+
+                # 绘制方向箭头
+                if cell and cell.allowed_directions:
+                    directions_text = "".join(self.direction_arrows[d] for d in cell.allowed_directions)
+                    self.ax.text(x, y, directions_text, ha='center', va='center', fontsize=8)
+
+                # 绘制货物标记
+                if cell and cell.has_cargo:
+                    cargo_rect = patches.Rectangle(
+                        (x - 0.18, y - 0.18), 0.36, 0.36,
+                        facecolor='red', edgecolor='darkred', alpha=0.85
                     )
-                    self.ax.add_patch(rect)
-                    
-                    # 绘制方向箭头
-                    if cell.allowed_directions:
-                        directions_text = "".join(self.direction_arrows[d] for d in cell.allowed_directions)
-                        self.ax.text(x, y, directions_text, ha='center', va='center', fontsize=8)
-                    
-                    # 绘制货物标记
-                    if cell.has_cargo:
-                        # 用红色小矩形块表示货物
-                        cargo_rect = patches.Rectangle(
-                            (x - 0.18, y - 0.18), 0.36, 0.36,
-                            facecolor='red', edgecolor='darkred', alpha=0.85
-                        )
-                        self.ax.add_patch(cargo_rect)
-        
+                    self.ax.add_patch(cargo_rect)
+
         # 绘制入口和出口
         for x, y in self.grid.entrances:
             self.ax.text(x, y, "IN", ha='center', va='center', color='blue', fontsize=10, weight='bold')
         for x, y in self.grid.exits:
             self.ax.text(x, y, "OUT", ha='center', va='center', color='green', fontsize=10, weight='bold')
+
+        # 图例：车辆ID-占用块颜色
+        for vid in vehicle_ids:
+            legend_elements.append(
+                Line2D([0], [0], marker='s', color='w', markerfacecolor=color_map[vid], markersize=15, label=f'占用 {vid}')
+            )
+        if legend_elements:
+            self.ax.legend(handles=legend_elements, loc='upper right', fontsize=8, title="车辆占用块")
     
     def draw_vehicles(self) -> None:
         """绘制车辆及其路径（每辆车路径不同颜色，并添加图例）"""
@@ -122,18 +143,6 @@ class GridVisualizer:
                 path_color = color_map[vehicle.id]
                 linestyle = '--' if vehicle.status == "waiting" else '-'
                 self.ax.plot(path_x, path_y, linestyle, color=path_color, alpha=0.7, linewidth=2)
-                # 路径箭头
-                if len(path_x) > 1:
-                    for i in range(len(path_x) - 1):
-                        mid_x = (path_x[i] + path_x[i + 1]) / 2
-                        mid_y = (path_y[i] + path_y[i + 1]) / 2
-                        dx = path_x[i + 1] - path_x[i]
-                        dy = path_y[i + 1] - path_y[i]
-                        self.ax.arrow(
-                            mid_x, mid_y, dx * 0.3, dy * 0.3,
-                            head_width=0.18, head_length=0.18,  # 更粗的箭头
-                            fc=path_color, ec=path_color, alpha=0.7, linewidth=2.5  # 更粗的线
-                        )
                 # 图例元素
                 legend_elements.append(Line2D([0], [0], color=path_color, lw=2, label=f'Path {vehicle.id}'))
 

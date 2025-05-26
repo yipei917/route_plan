@@ -113,24 +113,6 @@ class Grid:
         """获取所有出口"""
         return self.exits.copy()
 
-    def get_all_positions(self) -> List[Tuple[int, int]]:
-        """获取所有位置"""
-        return list(self.cells.keys())
-
-    def get_all_cells(self) -> List[GridCell]:
-        """获取所有格子"""
-        return list(self.cells.values())
-
-    def get_cell_type(self, x: int, y: int) -> Optional[str]:
-        """获取格子类型"""
-        cell = self.get_cell(x, y)
-        return cell.grid_type if cell else None
-
-    def get_cell_directions(self, x: int, y: int) -> Optional[List[str]]:
-        """获取格子允许的方向"""
-        cell = self.get_cell(x, y)
-        return cell.allowed_directions if cell else None
-
     def has_cargo(self, x: int, y: int) -> bool:
         """检查格子是否有货物"""
         cell = self.get_cell(x, y)
