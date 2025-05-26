@@ -11,7 +11,7 @@
       3
     ],
     "priority": 0,
-    "created_at": "2025-05-26T01:30:37.966286",
+    "created_at": "2025-05-26T14:24:13.285608",
     "status": "pending"
   },
   {
@@ -26,7 +26,7 @@
       5
     ],
     "priority": 0,
-    "created_at": "2025-05-26T01:30:37.966293",
+    "created_at": "2025-05-26T14:24:13.285608",
     "status": "pending"
   },
   {
@@ -41,7 +41,37 @@
       10
     ],
     "priority": 0,
-    "created_at": "2025-05-26T01:30:37.966296",
+    "created_at": "2025-05-26T14:24:13.285608",
+    "status": "pending"
+  },
+  {
+    "id": "T004",
+    "task_type": "outbound",
+    "start_position": [
+      8,
+      9
+    ],
+    "end_position": [
+      10,
+      3
+    ],
+    "priority": 0,
+    "created_at": "2025-05-26T14:24:13.285608",
+    "status": "pending"
+  },
+  {
+    "id": "T005",
+    "task_type": "inbound",
+    "start_position": [
+      0,
+      3
+    ],
+    "end_position": [
+      5,
+      2
+    ],
+    "priority": 0,
+    "created_at": "2025-05-26T14:24:13.285608",
     "status": "pending"
   }
 ]

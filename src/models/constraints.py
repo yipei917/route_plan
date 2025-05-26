@@ -123,6 +123,19 @@ class VehicleConflictConstraint(Constraint):
         """检查位置是否会发生冲突"""
         return position not in self.occupied_positions
 
+    def add_path(self, vehicle: Vehicle, path: List[Tuple[int, int]]) -> None:
+        """为指定车辆添加路径"""
+        if vehicle.id in self.vehicles.keys():
+            self.active_paths[vehicle.id] = path
+        else:
+            print(f"车辆 {vehicle.id} 不在约束系统中，无法添加路径")
+        self._update_occupied_positions()
+
+    def remove_path(self, vehicle: Vehicle) -> None:
+        """从约束系统中移除指定车辆的路径"""
+        if vehicle.id in self.active_paths:
+            del self.active_paths[vehicle.id]
+        self._update_occupied_positions()
 
 class ConstraintManager:
     """约束管理器"""
@@ -132,9 +145,6 @@ class ConstraintManager:
         self.vehicle_conflict_constraint = VehicleConflictConstraint()
         self.add_constraint(self.vehicle_conflict_constraint)
         self.vehicles = []
-        self.grid = None
-        self.entrance_tasks = {}  # 记录每个入口的任务队列
-        self.exit_tasks = {}  # 记录每个出口的任务队列
 
     def add_constraint(self, constraint: Constraint) -> None:
         """添加约束"""
@@ -163,42 +173,11 @@ class ConstraintManager:
         """从约束系统中移除车辆"""
         self.vehicle_conflict_constraint.remove_vehicle(vehicle_id)
         self.vehicles = [v for v in self.vehicles if v.id != vehicle_id]
+   
+    def add_path(self, vehicle: Vehicle, path: List[Tuple[int, int]]) -> None:
+        """为指定车辆添加路径"""
+        self.vehicle_conflict_constraint.add_path(vehicle, path)
 
-    def get_conflicting_vehicles(self, vehicle: Vehicle) -> List[Vehicle]:
-        """获取与指定车辆发生冲突的所有车辆"""
-        return self.vehicle_conflict_constraint.get_conflicting_vehicles(vehicle)
-
-    def add_task(self, task):
-        """添加任务到相应的队列"""
-        if task.task_type == "inbound":
-            # 入库任务添加到入口队列
-            if task.start_position in self.entrance_tasks:
-                self.entrance_tasks[task.start_position].append(task)
-        else:
-            # 出库任务添加到出口队列
-            if task.end_position in self.exit_tasks:
-                self.exit_tasks[task.end_position].append(task)
-
-    def check_entrance_exit_order(self, task, position):
-        """检查入口/出口的任务顺序约束"""
-        if task.task_type == "inbound":
-            # 检查入库任务是否按顺序执行
-            entrance_tasks = self.entrance_tasks.get(task.start_position, [])
-            if entrance_tasks and task != entrance_tasks[0]:
-                return False, f"入口 {task.start_position} 的任务必须按顺序执行，当前任务不是队列中的第一个任务"
-        else:
-            # 检查出库任务是否按顺序执行
-            exit_tasks = self.exit_tasks.get(task.end_position, [])
-            if exit_tasks and task != exit_tasks[0]:
-                return False, f"出口 {task.end_position} 的任务必须按顺序执行，当前任务不是队列中的第一个任务"
-        return True, None
-
-    def remove_task(self, task):
-        """从队列中移除已完成的任务"""
-        if task.task_type == "inbound":
-            if task.start_position in self.entrance_tasks:
-                self.entrance_tasks[task.start_position] = [t for t in self.entrance_tasks[task.start_position] if
-                                                            t.id != task.id]
-        else:
-            if task.end_position in self.exit_tasks:
-                self.exit_tasks[task.end_position] = [t for t in self.exit_tasks[task.end_position] if t.id != task.id]
+    def remove_path(self, vehicle: Vehicle) -> None:
+        """从约束系统中移除指定车辆的路径"""
+        self.vehicle_conflict_constraint.remove_path(vehicle)
