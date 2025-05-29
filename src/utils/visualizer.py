@@ -9,7 +9,7 @@ class GridVisualizer:
     """网格可视化器"""
     def __init__(self, grid: Grid):
         self.grid = grid
-        self.fig, self.ax = plt.subplots(figsize=(10, 10))
+        self.fig, self.ax = plt.subplots(figsize=(300, 200))
         self.vehicles: List[Vehicle] = []
         
         # 设置颜色映射
@@ -77,8 +77,11 @@ class GridVisualizer:
                 if pos in occupied_positions:
                     vid = occupied_positions[pos]
                     facecolor = color_map.get(vid, 'yellow')
+                # 绘制格子
+                rx = x
+                ry = self.grid.height - 1 - y
                 rect = patches.Rectangle(
-                    (x - 0.5, y - 0.5), 1, 1,
+                    (rx - 0.5, ry - 0.5), 1, 1,
                     facecolor=facecolor,
                     edgecolor=edgecolor
                 )
@@ -87,21 +90,21 @@ class GridVisualizer:
                 # 绘制方向箭头
                 if cell and cell.allowed_directions:
                     directions_text = "".join(self.direction_arrows[d] for d in cell.allowed_directions)
-                    self.ax.text(x, y, directions_text, ha='center', va='center', fontsize=8)
+                    self.ax.text(rx, ry, directions_text, ha='center', va='center', fontsize=8)
 
-                # 绘制货物标记
+                # 货物
                 if cell and cell.has_cargo:
                     cargo_rect = patches.Rectangle(
-                        (x - 0.18, y - 0.18), 0.36, 0.36,
+                        (rx - 0.18, ry - 0.18), 0.36, 0.36,
                         facecolor='red', edgecolor='darkred', alpha=0.85
                     )
                     self.ax.add_patch(cargo_rect)
 
         # 绘制入口和出口
         for x, y in self.grid.entrances:
-            self.ax.text(x, y, "IN", ha='center', va='center', color='blue', fontsize=10, weight='bold')
+            self.ax.text(x, self.grid.height - 1 - y, "IN", ha='center', va='center', color='blue', fontsize=10, weight='bold')
         for x, y in self.grid.exits:
-            self.ax.text(x, y, "OUT", ha='center', va='center', color='green', fontsize=10, weight='bold')
+            self.ax.text(x, self.grid.height - 1 - y, "OUT", ha='center', va='center', color='green', fontsize=10, weight='bold')
 
         # 图例：车辆ID-占用块颜色
         for vid in vehicle_ids:
@@ -125,21 +128,21 @@ class GridVisualizer:
             color = self.vehicle_colors.get(vehicle.vehicle_type, 'gray')
 
             # 绘制车辆
+            rx = x
+            ry = self.grid.height - 1 - y
             circle = patches.Circle(
-                (x, y), 0.3,
+                (rx, ry), 0.3,
                 facecolor=color,
                 edgecolor='black',
                 alpha=0.7
             )
             self.ax.add_patch(circle)
-
-            # 绘制车辆ID
-            self.ax.text(x, y, vehicle.id, ha='center', va='center', color='white', fontsize=8, weight='bold')
+            self.ax.text(rx, ry, vehicle.id, ha='center', va='center', color='white', fontsize=8, weight='bold')
 
             # 绘制路径（每辆车唯一颜色）
             if vehicle.path:
                 path_x = [p[0] for p in vehicle.path]
-                path_y = [p[1] for p in vehicle.path]
+                path_y = [self.grid.height - 1 - p[1] for p in vehicle.path]
                 path_color = color_map[vehicle.id]
                 linestyle = '--' if vehicle.status == "waiting" else '-'
                 self.ax.plot(path_x, path_y, linestyle, color=path_color, alpha=0.7, linewidth=2)

@@ -4,8 +4,23 @@ import random
 import json
 import os
 from .models.grid import Grid, GridCell, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE
-from .models.task import TaskManager, TransportTask, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TASK_STATUS_PENDING
-from .models.vehicle import Vehicle, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, VEHICLE_STATUS_IDLE, VEHICLE_STATUS_MOVING, VEHICLE_STATUS_LOADING, VEHICLE_STATUS_UNLOADING, VEHICLE_STATUS_WAITING
+from .models.task import (
+    TaskManager,
+    TransportTask,
+    TASK_TYPE_INBOUND,
+    TASK_TYPE_OUTBOUND,
+    TASK_STATUS_PENDING,
+)
+from .models.vehicle import (
+    Vehicle,
+    VEHICLE_TYPE_EMPTY,
+    VEHICLE_TYPE_LOADED,
+    VEHICLE_STATUS_IDLE,
+    VEHICLE_STATUS_MOVING,
+    VEHICLE_STATUS_LOADING,
+    VEHICLE_STATUS_UNLOADING,
+    VEHICLE_STATUS_WAITING,
+)
 from .models.constraints import ConstraintManager, PhysicalConstraint
 from .algorithms.a_star import AStarPlanner
 from .utils.visualizer import GridVisualizer
@@ -94,8 +109,11 @@ class Scheduler:
         cargo_positions = []
         for y in range(self.grid.height):
             for x in range(self.grid.width):
-                if (y in self.grid.main_channel_rows or x in self.grid.main_channel_columns or
-                        (x, y) in obstacle_positions):
+                if (
+                    y in self.grid.main_channel_rows
+                    or x in self.grid.main_channel_columns
+                    or (x, y) in obstacle_positions
+                ):
                     continue
                 cargo_positions.append((x, y))
         random.seed(42)
@@ -107,8 +125,11 @@ class Scheduler:
     def initialize(self, seed: Optional[int] = None) -> None:
         """初始化地图、车辆和约束"""
         # 添加物理约束（禁用点）
-        obstacle_positions = [(x, y) for (x, y), cell in self.grid.cells.items() if
-                              cell.grid_type == GRID_TYPE_OBSTACLE]
+        obstacle_positions = [
+            (x, y)
+            for (x, y), cell in self.grid.cells.items()
+            if cell.grid_type == GRID_TYPE_OBSTACLE
+        ]
         physical_constraint = PhysicalConstraint(obstacle_positions)
         self.constraint_manager.add_constraint(physical_constraint)
 
@@ -117,14 +138,16 @@ class Scheduler:
             for x in range(self.grid.width):
                 pos = (x, row)
                 main_channel_positions.append(pos)
- 
+
         self.vehicles.clear()
         for i in range(self.num_vehicles):
             if i >= len(main_channel_positions):
                 raise ValueError("主干道空间不足以顺序放置所有车辆")
             x, y = main_channel_positions[i]
             vehicle_type = VEHICLE_TYPE_EMPTY
-            vehicle = Vehicle(id=f"V{i + 1:03d}", vehicle_type=vehicle_type, current_position=(x, y))
+            vehicle = Vehicle(
+                id=f"V{i + 1:03d}", vehicle_type=vehicle_type, current_position=(x, y)
+            )
             self.vehicles.append(vehicle)
             self.constraint_manager.add_vehicle(vehicle)
             self.grid_visualizer.add_vehicle(vehicle)
@@ -142,13 +165,19 @@ class Scheduler:
                     dest_x = random.randint(0, self.grid.width - 1)
                     dest_y = random.randint(0, self.grid.height - 1)
                     cell = self.grid.get_cell(dest_x, dest_y)
-                    if (cell and cell.grid_type != "obstacle" and
-                        dest_y not in self.grid.main_channel_rows and
-                        dest_x not in self.grid.main_channel_columns and
-                        not cell.has_cargo):
+                    if (
+                        cell
+                        and cell.grid_type != "obstacle"
+                        and dest_y not in self.grid.main_channel_rows
+                        and dest_x not in self.grid.main_channel_columns
+                        and not cell.has_cargo
+                    ):
                         break
-                task = self.task_manager.add_task(task_type=TASK_TYPE_INBOUND, start_pos=entrance,
-                                                  end_pos=(dest_x, dest_y))
+                task = self.task_manager.add_task(
+                    task_type=TASK_TYPE_INBOUND,
+                    start_pos=entrance,
+                    end_pos=(dest_x, dest_y),
+                )
             else:
                 # 出库任务：源格子必须有货物
                 exit_pos = random.choice(exits)
@@ -156,38 +185,57 @@ class Scheduler:
                     src_x = random.randint(0, self.grid.width - 1)
                     src_y = random.randint(0, self.grid.height - 1)
                     cell = self.grid.get_cell(src_x, src_y)
-                    if (cell and cell.grid_type != "obstacle" and
-                        src_y not in self.grid.main_channel_rows and
-                        src_x not in self.grid.main_channel_columns and
-                        cell.has_cargo):
+                    if (
+                        cell
+                        and cell.grid_type != "obstacle"
+                        and src_y not in self.grid.main_channel_rows
+                        and src_x not in self.grid.main_channel_columns
+                        and cell.has_cargo
+                    ):
                         break
-                task = self.task_manager.add_task(task_type=TASK_TYPE_OUTBOUND, start_pos=(src_x, src_y),
-                                                  end_pos=exit_pos)
+                task = self.task_manager.add_task(
+                    task_type=TASK_TYPE_OUTBOUND,
+                    start_pos=(src_x, src_y),
+                    end_pos=exit_pos,
+                )
 
-    def save_map_and_tasks(self, map_filename: str, tasks_filename: str, save_tasks: bool = True) -> None:
+    def save_map_and_tasks(
+        self, map_filename: str, tasks_filename: str, save_tasks: bool = True
+    ) -> None:
         """保存地图和任务到JSON文件"""
         self.grid.save_to_json(map_filename)
         if save_tasks:
-            tasks_data = [{"id": task.id, "task_type": task.task_type, "start_position": task.start_position,
-                           "end_position": task.end_position, "priority": task.priority,
-                           "created_at": task.created_at.isoformat(), "status": task.status}
-                          for task in self.task_manager.tasks]
-            with open(tasks_filename, 'w', encoding='utf-8') as f:
+            tasks_data = [
+                {
+                    "id": task.id,
+                    "task_type": task.task_type,
+                    "start_position": task.start_position,
+                    "end_position": task.end_position,
+                    "priority": task.priority,
+                    "created_at": task.created_at.isoformat(),
+                    "status": task.status,
+                }
+                for task in self.task_manager.tasks
+            ]
+            with open(tasks_filename, "w", encoding="utf-8") as f:
                 json.dump(tasks_data, f, indent=2, ensure_ascii=False)
 
     def load_map_and_tasks(self, map_filename: str, tasks_filename: str) -> None:
         """从JSON文件加载地图和任务"""
         self.grid.load_from_json(map_filename)
         try:
-            with open(tasks_filename, 'r', encoding='utf-8') as f:
+            with open(tasks_filename, "r", encoding="utf-8") as f:
                 tasks_data = json.load(f)
             for task_data in tasks_data:
-                task = TransportTask(id=task_data["id"], task_type=task_data["task_type"],
-                                     start_position=tuple(task_data["start_position"]),
-                                     end_position=tuple(task_data["end_position"]),
-                                     priority=task_data["priority"],
-                                     created_at=datetime.fromisoformat(task_data["created_at"]),
-                                     status=task_data["status"])
+                task = TransportTask(
+                    id=task_data["id"],
+                    task_type=task_data["task_type"],
+                    start_position=tuple(task_data["start_position"]),
+                    end_position=tuple(task_data["end_position"]),
+                    priority=task_data["priority"],
+                    created_at=datetime.fromisoformat(task_data["created_at"]),
+                    status=task_data["status"],
+                )
                 self.task_manager.tasks.append(task)
         except FileNotFoundError:
             print(f"任务文件 {tasks_filename} 未找到。开始时没有任务。")
@@ -199,7 +247,11 @@ class Scheduler:
             print("无可分配任务")
             return SYSTEM_STATUS_WORKING
 
-        idle_vehicles = [vehicle for vehicle in self.vehicles if vehicle.status == VEHICLE_STATUS_IDLE]
+        idle_vehicles = [
+            vehicle
+            for vehicle in self.vehicles
+            if vehicle.status == VEHICLE_STATUS_IDLE
+        ]
         if not idle_vehicles:
             print("无空闲车辆")
             return SYSTEM_STATUS_BUSY
@@ -211,12 +263,15 @@ class Scheduler:
             # 按距离排序所有空闲车辆
             sorted_vehicles = sorted(
                 idle_vehicles,
-                key=lambda v: abs(v.current_position[0] - task.start_position[0]) + abs(v.current_position[1] - task.start_position[1])
+                key=lambda v: abs(v.current_position[0] - task.start_position[0])
+                + abs(v.current_position[1] - task.start_position[1]),
             )
 
             for vehicle in sorted_vehicles:
                 # 规划路径（先到任务起点）
-                path_to_start = self.path_planner.find_path(vehicle, vehicle.current_position, task.start_position)
+                path_to_start = self.path_planner.find_path(
+                    vehicle, vehicle.current_position, task.start_position
+                )
                 if path_to_start is None:
                     continue  # 该车无法到达，尝试下一个
 
@@ -226,9 +281,13 @@ class Scheduler:
                     vehicle.start_task()
                     vehicle.status = VEHICLE_STATUS_LOADING
                     idle_vehicles.remove(vehicle)
-                    self.constraint_manager.add_path(vehicle, path_to_start)  # 启动任务后加入约束管理
+                    self.constraint_manager.add_path(
+                        vehicle, path_to_start
+                    )  # 启动任务后加入约束管理
                     assigned_any = True
-                    print(f"任务 {task.id} 已分配给车辆 {vehicle.id}, 路径: {vehicle.get_path_str()}")
+                    print(
+                        f"任务 {task.id} 已分配给车辆 {vehicle.id}, 路径: {vehicle.get_path_str()}"
+                    )
                     break  # 该任务已分配，跳出车辆循环
 
             else:
@@ -241,7 +300,17 @@ class Scheduler:
 
     def simulate_step(self) -> bool:
         """模拟一步，更新车辆位置"""
-        active_vehicles = [v for v in self.vehicles if v.status in (VEHICLE_STATUS_WAITING, VEHICLE_STATUS_MOVING, VEHICLE_STATUS_LOADING, VEHICLE_STATUS_UNLOADING)]
+        active_vehicles = [
+            v
+            for v in self.vehicles
+            if v.status
+            in (
+                VEHICLE_STATUS_WAITING,
+                VEHICLE_STATUS_MOVING,
+                VEHICLE_STATUS_LOADING,
+                VEHICLE_STATUS_UNLOADING,
+            )
+        ]
         if not active_vehicles:
             return False
 
@@ -267,13 +336,17 @@ class Scheduler:
                     vehicle.vehicle_type = VEHICLE_TYPE_LOADED
                 # 规划去终点路径
                 self.constraint_manager.remove_path(vehicle)
-                path_to_end = self.path_planner.find_path(vehicle, vehicle.current_position, task.end_position)
+                path_to_end = self.path_planner.find_path(
+                    vehicle, vehicle.current_position, task.end_position
+                )
                 if path_to_end:
                     vehicle.set_path(path_to_end)
                     vehicle.status = VEHICLE_STATUS_UNLOADING
                     self.constraint_manager.add_path(vehicle, path_to_end)
                 else:
-                    print(f"车辆 {vehicle.id} 无法从起点{vehicle.current_position}到终点{task.end_position}，任务无法完成")
+                    print(
+                        f"车辆 {vehicle.id} 无法从起点{vehicle.current_position}到终点{task.end_position}，任务无法完成"
+                    )
                     vehicle.set_waiting()
                     vehicle.status = VEHICLE_STATUS_WAITING
 
@@ -297,7 +370,13 @@ class Scheduler:
         full_path = os.path.join(self.output_dir, filename)
         self.grid_visualizer.save(full_path)
 
-    def run(self, num_tasks: int, max_steps: int, save_map: bool = True, save_tasks: bool = True) -> None:
+    def run(
+        self,
+        num_tasks: int,
+        max_steps: int,
+        save_map: bool = True,
+        save_tasks: bool = True,
+    ) -> None:
         """运行调度模拟，每一步都生成图片"""
         map_filename = os.path.join(self.output_dir, "map.json")
         tasks_filename = os.path.join(self.output_dir, "tasks.json")
@@ -325,8 +404,18 @@ class Scheduler:
             # self.visualize(f"step_{step}.png")
             step += 1
 
+    def load_from_xlsx(self, filename: str) -> None:
+        """从Excel文件加载地图和任务"""
+        # 这里可以使用pandas等库来读取Excel文件
+        # 目前仅提供框架，具体实现需要根据实际Excel格式来编写
+        self.grid.load_map_from_excel(filename)
+        self.grid_visualizer.draw_grid(self.constraint_manager)
+        full_path = os.path.join(self.output_dir, "test_map.png")
+        self.grid_visualizer.save(full_path)
+
 
 if __name__ == "__main__":
     scheduler = Scheduler(num_vehicles=2)
-    scheduler.run(num_tasks=5, max_steps=100, save_map=True, save_tasks=True)
+    # scheduler.run(num_tasks=5, max_steps=100, save_map=True, save_tasks=True)
     # scheduler.run(num_tasks=0, max_steps=100, save_map=False, save_tasks=False)
+    scheduler.load_from_xlsx("resource/map4.xlsx")

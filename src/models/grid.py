@@ -1,6 +1,8 @@
 from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
 import json
+from matplotlib.pyplot import grid
+import pandas as pd
 
 # 使用字典替代枚举
 DIRECTION_MAP = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
@@ -21,7 +23,7 @@ class GridCell:
 
     def __post_init__(self):
         if self.allowed_directions is None:
-            self.allowed_directions = ["left", "right"]
+            self.allowed_directions = []
 
     def can_pass(self, is_empty: bool) -> bool:
         """检查是否可以通行"""
@@ -125,28 +127,34 @@ class Grid:
 
     def save_to_json(self, filename: str) -> None:
         """将地图保存为 JSON 文件"""
-        cargo_positions = [(x, y) for (x, y), cell in self.cells.items() if cell.has_cargo]
-        obstacle_positions = [(x, y) for (x, y), cell in self.cells.items() if cell.grid_type == GRID_TYPE_OBSTACLE]
+        cargo_positions = [
+            (x, y) for (x, y), cell in self.cells.items() if cell.has_cargo
+        ]
+        obstacle_positions = [
+            (x, y)
+            for (x, y), cell in self.cells.items()
+            if cell.grid_type == GRID_TYPE_OBSTACLE
+        ]
 
         map_data = {
             "width": self.width,
             "height": self.height,
             "main_channels": {
                 "rows": self.main_channel_rows,
-                "columns": self.main_channel_columns
+                "columns": self.main_channel_columns,
             },
             "obstacles": obstacle_positions,
             "entrances": self.entrances,
             "exits": self.exits,
-            "cargo": cargo_positions
+            "cargo": cargo_positions,
         }
 
-        with open(filename, 'w') as f:
+        with open(filename, "w") as f:
             json.dump(map_data, f, indent=2)
 
     def load_from_json(self, filename: str) -> None:
         """从 JSON 文件加载地图"""
-        with open(filename, 'r') as f:
+        with open(filename, "r") as f:
             map_data = json.load(f)
 
         # 初始化网格
@@ -178,3 +186,56 @@ class Grid:
         # 设置货物
         for x, y in map_data["cargo"]:
             self.set_cargo(x, y, True)
+
+    def load_map_from_excel(self, path: str) -> None:
+        df = pd.read_excel(path, header=None)
+        df = df.iloc[1:, 1:]  # 跳过第一行和第一列
+
+        rows, cols = df.shape
+        self.width = cols
+        self.height = rows
+        self.cells.clear()
+        self.entrances.clear()
+        self.exits.clear()
+        self.main_channel_rows.clear()
+        self.main_channel_columns.clear()
+
+        direction_map = {"上": "up", "下": "down", "左": "left", "右": "right"}
+
+        for y in range(rows):
+            for x in range(cols):
+                cell_text = str(df.iat[y, x]) if pd.notna(df.iat[y, x]) else ""
+                grid_type = GRID_TYPE_OBSTACLE
+                allowed_directions = []
+
+                if cell_text == "":
+                    cell = GridCell(
+                        x=x,
+                        y=y,
+                        grid_type=grid_type,
+                        allowed_directions=allowed_directions,
+                    )
+                    self.cells[(x, y)] = cell
+                    continue  # 跳过空格子
+
+                # 判断类型
+                if "禁用" in cell_text:
+                    grid_type = GRID_TYPE_OBSTACLE
+                elif "接驳口" in cell_text:
+                    grid_type = GRID_TYPE_MAIN_CHANNEL
+                    self.add_entrance(x, y)
+                    self.add_exit(x, y)
+                elif "道" in cell_text:
+                    grid_type = GRID_TYPE_MAIN_CHANNEL
+                elif "货" in cell_text:
+                    grid_type = GRID_TYPE_NORMAL_CHANNEL
+
+                # 解析方向
+                for zh_dir, en_dir in direction_map.items():
+                    if zh_dir in cell_text:
+                        allowed_directions.append(en_dir)
+
+                cell = GridCell(
+                    x=x, y=y, grid_type=grid_type, allowed_directions=allowed_directions
+                )
+                self.cells[(x, y)] = cell
