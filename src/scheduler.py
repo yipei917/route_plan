@@ -78,7 +78,7 @@ class Scheduler:
             pos for pos in all_positions
             if pos not in obstacle_positions and pos not in main_channel_positions
         ]
-        num_cargo = max(1, int(0.1 * len(valid_positions)))  # 10% 的货物
+        num_cargo = max(1, int(0.8 * len(valid_positions)))  # 80% 的货物
         cargo_positions = random.sample(valid_positions, num_cargo)
         for x, y in cargo_positions:
             self.grid.set_cargo(x, y, True)
@@ -157,6 +157,7 @@ class Scheduler:
                     self.constraint_manager.add_path(vehicle, path_to_start)
                     assigned_any = True
                     print(f"任务 {task.id} 已分配给车辆 {vehicle.id}, 路径: {vehicle.get_path_str()}")
+                    self.visualize(f"assign_{task.id}_part_1.png")
                     break
             else: print(f"任务 {task.id} 暂无可用车辆或所有车辆均无法到达")
         return SYSTEM_STATUS_WORKING if assigned_any else SYSTEM_STATUS_BUSY
@@ -245,6 +246,6 @@ class Scheduler:
 
 
 if __name__ == "__main__":
-    scheduler = Scheduler(num_vehicles=2)
-    scheduler.run(num_tasks=2, max_steps=200, load=True)
+    scheduler = Scheduler(num_vehicles=4)
+    scheduler.run(num_tasks=4, max_steps=500, load=True)
 
