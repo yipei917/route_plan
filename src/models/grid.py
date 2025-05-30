@@ -1,7 +1,6 @@
 from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
 import json
-from matplotlib.pyplot import grid
 import pandas as pd
 
 # 使用字典替代枚举
@@ -127,65 +126,45 @@ class Grid:
 
     def save_to_json(self, filename: str) -> None:
         """将地图保存为 JSON 文件"""
-        cargo_positions = [
-            (x, y) for (x, y), cell in self.cells.items() if cell.has_cargo
-        ]
-        obstacle_positions = [
-            (x, y)
-            for (x, y), cell in self.cells.items()
-            if cell.grid_type == GRID_TYPE_OBSTACLE
-        ]
-
         map_data = {
             "width": self.width,
             "height": self.height,
-            "main_channels": {
-                "rows": self.main_channel_rows,
-                "columns": self.main_channel_columns,
-            },
-            "obstacles": obstacle_positions,
+            "cells": [
+                {
+                    "x": x,
+                    "y": y,
+                    "grid_type": cell.grid_type,
+                    "allowed_directions": cell.allowed_directions,
+                    "has_cargo": cell.has_cargo,
+                }
+                for (x, y), cell in self.cells.items()
+            ],
             "entrances": self.entrances,
             "exits": self.exits,
-            "cargo": cargo_positions,
         }
 
-        with open(filename, "w") as f:
+        with open(filename, "w", encoding="utf-8") as f:
             json.dump(map_data, f, indent=2)
 
     def load_from_json(self, filename: str) -> None:
         """从 JSON 文件加载地图"""
-        with open(filename, "r") as f:
+        with open(filename, "r", encoding="utf-8") as f:
             map_data = json.load(f)
 
         # 初始化网格
         self.width = map_data["width"]
         self.height = map_data["height"]
         self.cells.clear()
-        for y in range(self.height):
-            for x in range(self.width):
-                self.cells[(x, y)] = GridCell(x, y)
-
-        # 设置主通道
-        self.main_channel_rows = map_data["main_channels"]["rows"]
-        self.main_channel_columns = map_data["main_channels"]["columns"]
-        for row in self.main_channel_rows:
-            for x in range(self.width):
-                self.set_cell_type(x, row, GRID_TYPE_MAIN_CHANNEL)
-        for col in self.main_channel_columns:
-            for y in range(self.height):
-                self.set_cell_type(col, y, GRID_TYPE_MAIN_CHANNEL)
-
-        # 设置障碍物
-        for x, y in map_data["obstacles"]:
-            self.set_cell_type(x, y, GRID_TYPE_OBSTACLE)
+        for cell_data in map_data["cells"]:
+            x, y = cell_data["x"], cell_data["y"]
+            grid_type = cell_data["grid_type"]
+            allowed_directions = cell_data["allowed_directions"]
+            has_cargo = cell_data["has_cargo"]
+            self.cells[(x, y)] = GridCell(x, y, grid_type, allowed_directions, has_cargo)
 
         # 设置入口和出口
         self.entrances = [tuple(pos) for pos in map_data["entrances"]]
         self.exits = [tuple(pos) for pos in map_data["exits"]]
-
-        # 设置货物
-        for x, y in map_data["cargo"]:
-            self.set_cargo(x, y, True)
 
     def load_map_from_excel(self, path: str) -> None:
         df = pd.read_excel(path, header=None)

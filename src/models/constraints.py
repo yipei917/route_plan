@@ -132,7 +132,6 @@ class VehicleConflictConstraint(Constraint):
         if vehicle.id in self.active_paths:
             del self.active_paths[vehicle.id]
         else:
-            print(self.active_paths)
             print(f"车辆 {vehicle.id} 没有活动路径，无法移除路径")
         self._update_occupied_positions()
 
