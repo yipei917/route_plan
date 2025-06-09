@@ -3,13 +3,14 @@ from datetime import datetime
 import random
 import json
 import os
-from .models.grid import Grid, GridCell, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE
+from .models.grid import Grid, GridCell, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE, GRID_TYPE_NORMAL_CHANNEL
 from .models.task import (
     TaskManager,
     TransportTask,
     TASK_TYPE_INBOUND,
     TASK_TYPE_OUTBOUND,
     TASK_STATUS_PENDING,
+    TASK_STATUS_IN_PROGRESS
 )
 from .models.vehicle import (
     Vehicle,
@@ -84,50 +85,41 @@ class Scheduler:
                 filled += 1
 
     def generate_tasks(self, num_tasks: int, seed: Optional[int] = None) -> None:
-        """生成任务，出库优先道路边缘，入库优先最里面"""
+        """生成任务，入库任务选择离主通道最远的地方，出库任务选择离主通道最近的有货地方，任务之间不能冲突"""
         if seed is not None:
             random.seed(seed)
 
         entrances, exits = self.grid.get_all_entrances(), self.grid.get_all_exits()
-        # 固定主通道行为7, 14, 25
-        main_channel_rows = [7, 14, 25]
-
-        used_outbound = set()
-        used_inbound = set()
+        main_channel_rows = [7, 14, 25]  # 固定主通道行为
+        used_inbound = set()  # 记录已使用的入库终点
+        used_outbound = set()  # 记录已使用的出库起点
 
         for _ in range(num_tasks):
-            if random.choice([True, False]):
-                # 入库任务：终点选每列最里面的空格
+            x = random.randint(0, self.grid.width - 1)
+            y = random.randint(0, self.grid.height - 1)
+
+            # 寻找最近的主通道行
+            closest_mainrow = min(main_channel_rows, key=lambda row: abs(row - y))
+
+            if random.choice([True, False]):  # 入库任务
                 entrance = random.choice(entrances)
-                candidate_ends = []
-                for x in range(self.grid.width):
-                    for y in reversed(range(self.grid.height)):
-                        if y in main_channel_rows:
-                            continue
-                        cell = self.grid.get_cell(x, y)
-                        if cell and cell.grid_type != GRID_TYPE_OBSTACLE and not cell.has_cargo and (x, y) not in used_inbound:
-                            candidate_ends.append((x, y))
+                for target_y in reversed(range(self.grid.height)):  # 从远端开始寻找
+                    if target_y > closest_mainrow:  # 远离主通道行
+                        cell = self.grid.get_cell(x, target_y)
+                        if cell and cell.grid_type != GRID_TYPE_OBSTACLE and not cell.has_cargo and target_y not in main_channel_rows and (x, target_y) not in used_inbound:
+                            self.task_manager.add_task(task_type=TASK_TYPE_INBOUND, start_pos=entrance, end_pos=(x, target_y))
+                            used_inbound.add((x, target_y))  # 标记该位置为已使用
                             break
-                if candidate_ends:
-                    end_pos = random.choice(candidate_ends)
-                    used_inbound.add(end_pos)
-                    self.task_manager.add_task(task_type=TASK_TYPE_INBOUND, start_pos=entrance, end_pos=end_pos)
-            else:
-                # 出库任务：起点选每列靠近主通道的有货格
+            else:  # 出库任务
                 exit_pos = random.choice(exits)
-                candidate_starts = []
-                for x in range(self.grid.width):
-                    for y in range(self.grid.height):
-                        if y in main_channel_rows:
-                            continue
-                        cell = self.grid.get_cell(x, y)
-                        if cell and cell.grid_type != GRID_TYPE_OBSTACLE and cell.has_cargo and (x, y) not in used_outbound:
-                            candidate_starts.append((x, y))
-                            break
-                if candidate_starts:
-                    start_pos = random.choice(candidate_starts)
-                    used_outbound.add(start_pos)
-                    self.task_manager.add_task(task_type=TASK_TYPE_OUTBOUND, start_pos=start_pos, end_pos=exit_pos)
+                # 从 closest_mainrow-1 向下一个 main_channel_row+1（不含）方向寻找
+                next_mainrow = max([row for row in main_channel_rows if row < closest_mainrow], default=-1)
+                for target_y in range(closest_mainrow - 1, next_mainrow, -1):
+                    cell = self.grid.get_cell(x, target_y)
+                    if cell and cell.grid_type != GRID_TYPE_OBSTACLE and cell.has_cargo and target_y not in main_channel_rows and (x, target_y) not in used_outbound:
+                        self.task_manager.add_task(task_type=TASK_TYPE_OUTBOUND, start_pos=(x, target_y), end_pos=exit_pos)
+                        used_outbound.add((x, target_y))  # 标记该位置为已使用
+                        break
 
     def save_tasks(self, tasks_filename: str) -> None:
         """仅保存任务到JSON文件"""
@@ -199,10 +191,32 @@ class Scheduler:
                     self.constraint_manager.add_path(vehicle, path_to_start)
                     assigned_any = True
                     print(f"任务 {task.id} 已分配给车辆 {vehicle.id}, 路径: {vehicle.get_path_str()}")
-                    self.visualize(f"assign_{task.id}_part_1.png")
+                    # self.visualize(f"assign_{task.id}_part_1.png")
                     break
             else: print(f"任务 {task.id} 暂无可用车辆或所有车辆均无法到达")
         return SYSTEM_STATUS_WORKING if assigned_any else SYSTEM_STATUS_BUSY
+
+    def move_idle_vehicles_to_normal_channel(self) -> None:
+        """将空闲车辆从主干道移动到最近的普通通道"""
+        for vehicle in self.vehicles:
+            if vehicle.status == VEHICLE_STATUS_IDLE:
+                current_cell = self.grid.get_cell(*vehicle.current_position)
+                if current_cell and current_cell.grid_type == GRID_TYPE_MAIN_CHANNEL:
+                    # 找到最近的普通通道
+                    normal_channel_positions = [
+                        (x, y) for (x, y), cell in self.grid.cells.items()
+                        if cell.grid_type == GRID_TYPE_NORMAL_CHANNEL
+                    ]
+                    closest_position = min(
+                        normal_channel_positions,
+                        key=lambda pos: abs(pos[0] - vehicle.current_position[0]) + abs(pos[1] - vehicle.current_position[1]),
+                    )
+                    path_to_normal_channel = self.path_planner.find_path(vehicle, vehicle.current_position, closest_position)
+                    if path_to_normal_channel:
+                        vehicle.set_path(path_to_normal_channel)
+                        vehicle.status = VEHICLE_STATUS_MOVING
+                        self.constraint_manager.add_path(vehicle, path_to_normal_channel)
+                        print(f"车辆 {vehicle.id} 从主干道移动到普通通道 {closest_position}")
 
     def simulate_step(self) -> bool:
         """模拟一步，更新车辆位置"""
@@ -217,7 +231,10 @@ class Scheduler:
                 continue
 
             task = vehicle.current_task
-            if not task: continue
+            if not task:
+                vehicle.status = VEHICLE_STATUS_IDLE
+                self.constraint_manager.remove_path(vehicle)
+                continue
 
             if vehicle.current_position == task.start_position:
                 if task.task_type == TASK_TYPE_OUTBOUND:
@@ -232,7 +249,7 @@ class Scheduler:
                     vehicle.status = VEHICLE_STATUS_UNLOADING
                     self.constraint_manager.add_path(vehicle, path_to_end)
                 else:
-                    print(f"车辆 {vehicle.id} 无法从起点{vehicle.current_position}到终点{task.end_position}，任务无法完成")
+                    print(f"车辆 {vehicle.id} 无法从起点{vehicle.current_position}到终点{task.end_position}，任务无法完成，task: {task.id}")
                     vehicle.set_waiting()
                     vehicle.status = VEHICLE_STATUS_WAITING
 
@@ -255,7 +272,7 @@ class Scheduler:
         self.grid_visualizer.save(full_path)
 
     def run(self, num_tasks: int, max_steps: int, load: bool = True) -> None:
-        """运行调度模拟，每一步都生成图片"""
+        """运行调度模拟，每次生成6个任务，任务全部完成后再生成，总任务数不超过num_tasks"""
         tasks_filename = os.path.join(self.output_dir, "tasks.json")
         map_filename = os.path.join(self.output_dir, "map.json")
 
@@ -265,13 +282,14 @@ class Scheduler:
         else:
             self.load_from_xlsx("resource/map4.xlsx")
             self.genarate_cargo(20)
-            self.generate_tasks(num_tasks)
+            self.generate_tasks(min(6, num_tasks))  # 初始生成最多6个任务
             self.save_tasks(tasks_filename)
             self.save_map(map_filename)
 
         self.initialize()
 
         step = 0
+        total_tasks_generated = len(self.task_manager.tasks)  # 记录已生成任务数
         print(f"\n=== 初始状态（步骤 {step}） ===")
         # self.visualize(f"step_{step}.png")
         step += 1
@@ -279,9 +297,23 @@ class Scheduler:
         while step <= max_steps:
             print(f"\n=== 模拟步骤 {step} ===")
             self.assign_and_plan()
+            self.move_idle_vehicles_to_normal_channel()  # 调用新函数
+
             if not self.simulate_step():
                 print("没有活动车辆，模拟结束")
                 break
+
+            # 检查任务状态
+            pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
+            active_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_IN_PROGRESS)
+
+            if not pending_tasks and not active_tasks and total_tasks_generated < num_tasks:
+                remaining_tasks = num_tasks - total_tasks_generated
+                tasks_to_generate = min(6, remaining_tasks)  # 每次生成最多6个任务
+                self.generate_tasks(tasks_to_generate)
+                total_tasks_generated += tasks_to_generate
+                print(f"生成了 {tasks_to_generate} 个新任务，总任务数达到 {total_tasks_generated}")
+
             # self.visualize(f"step_{step}.png")
             step += 1
 
@@ -292,5 +324,6 @@ class Scheduler:
 
 if __name__ == "__main__":
     scheduler = Scheduler(num_vehicles=4)
-    scheduler.run(num_tasks=8, max_steps=500, load=False)
+    scheduler.run(num_tasks=20, max_steps=2000, load=False)
+    # scheduler.visualize("final_state.png")
 

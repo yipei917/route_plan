@@ -3,15 +3,15 @@
     "id": "T001",
     "task_type": "outbound",
     "start_position": [
-      38,
-      0
+      56,
+      22
     ],
     "end_position": [
-      2,
-      6
+      13,
+      46
     ],
     "priority": 0,
-    "created_at": "2025-06-09T11:49:29.799945",
+    "created_at": "2025-06-09T17:25:16.343421",
     "status": "pending"
   },
   {
@@ -19,104 +19,59 @@
     "task_type": "inbound",
     "start_position": [
       2,
-      26
+      8
     ],
     "end_position": [
-      57,
+      22,
       50
     ],
     "priority": 0,
-    "created_at": "2025-06-09T11:49:29.799999",
+    "created_at": "2025-06-09T17:25:16.343421",
     "status": "pending"
   },
   {
     "id": "T003",
     "task_type": "outbound",
     "start_position": [
-      4,
-      8
-    ],
-    "end_position": [
-      2,
-      8
-    ],
-    "priority": 0,
-    "created_at": "2025-06-09T11:49:29.800054",
-    "status": "pending"
-  },
-  {
-    "id": "T004",
-    "task_type": "outbound",
-    "start_position": [
-      86,
-      8
-    ],
-    "end_position": [
-      39,
-      46
-    ],
-    "priority": 0,
-    "created_at": "2025-06-09T11:49:29.800108",
-    "status": "pending"
-  },
-  {
-    "id": "T005",
-    "task_type": "outbound",
-    "start_position": [
-      61,
-      0
-    ],
-    "end_position": [
-      2,
-      26
-    ],
-    "priority": 0,
-    "created_at": "2025-06-09T11:49:29.800158",
-    "status": "pending"
-  },
-  {
-    "id": "T006",
-    "task_type": "outbound",
-    "start_position": [
-      55,
-      0
+      43,
+      22
     ],
     "end_position": [
       41,
       46
     ],
     "priority": 0,
-    "created_at": "2025-06-09T11:49:29.800207",
+    "created_at": "2025-06-09T17:25:16.343421",
     "status": "pending"
   },
   {
-    "id": "T007",
-    "task_type": "inbound",
-    "start_position": [
-      13,
-      46
-    ],
-    "end_position": [
-      23,
-      50
-    ],
-    "priority": 0,
-    "created_at": "2025-06-09T11:49:29.800251",
-    "status": "pending"
-  },
-  {
-    "id": "T008",
+    "id": "T004",
     "task_type": "outbound",
     "start_position": [
-      59,
-      0
+      38,
+      22
     ],
     "end_position": [
       2,
-      26
+      6
     ],
     "priority": 0,
-    "created_at": "2025-06-09T11:49:29.800302",
+    "created_at": "2025-06-09T17:25:16.343421",
+    "status": "pending"
+  },
+  {
+    "id": "T005",
+    "task_type": "inbound",
+    "start_position": [
+      41,
+      46
+    ],
+    "end_position": [
+      55,
+      50
+    ],
+    "priority": 0,
+    "created_at": "2025-06-09T17:25:16.343421",
     "status": "pending"
   }
 ]
