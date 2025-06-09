@@ -67,73 +67,115 @@ class Scheduler:
             self.constraint_manager.add_vehicle(vehicle)
             self.grid_visualizer.add_vehicle(vehicle)
         
-    def genarate_cargo(self) -> None:
-        """随机生成货物"""
+    def genarate_cargo(self, fill_rows: int = None) -> None:
+        """按列顺序填满货物，可指定每列填满前N行"""
         obstacle_positions = [(x, y) for (x, y), cell in self.grid.cells.items() if cell.grid_type == GRID_TYPE_OBSTACLE]
         main_channel_positions = [(x, y) for (x, y), cell in self.grid.cells.items() if cell.grid_type == GRID_TYPE_MAIN_CHANNEL]
 
-        # 随机生成货物
-        all_positions = [(x, y) for x in range(self.grid.width) for y in range(self.grid.height)]
-        valid_positions = [
-            pos for pos in all_positions
-            if pos not in obstacle_positions and pos not in main_channel_positions
-        ]
-        num_cargo = max(1, int(0.8 * len(valid_positions)))  # 80% 的货物
-        cargo_positions = random.sample(valid_positions, num_cargo)
-        for x, y in cargo_positions:
-            self.grid.set_cargo(x, y, True)
+        for x in range(self.grid.width):
+            filled = 0
+            for y in range(self.grid.height):
+                pos = (x, y)
+                if pos in obstacle_positions or pos in main_channel_positions:
+                    continue
+                if fill_rows is not None and filled >= fill_rows:
+                    break
+                self.grid.set_cargo(x, y, True)
+                filled += 1
 
     def generate_tasks(self, num_tasks: int, seed: Optional[int] = None) -> None:
-        """根据当前货物情况生成指定数量的任务，支持随机种子"""
+        """生成任务，出库优先道路边缘，入库优先最里面"""
         if seed is not None:
             random.seed(seed)
 
         entrances, exits = self.grid.get_all_entrances(), self.grid.get_all_exits()
+        # 固定主通道行为7, 14, 25
+        main_channel_rows = [7, 14, 25]
+
+        used_outbound = set()
+        used_inbound = set()
+
         for _ in range(num_tasks):
             if random.choice([True, False]):
+                # 入库任务：终点选每列最里面的空格
                 entrance = random.choice(entrances)
-                while True:
-                    dest_x, dest_y = random.randint(0, self.grid.width - 1), random.randint(0, self.grid.height - 1)
-                    cell = self.grid.get_cell(dest_x, dest_y)
-                    if cell and cell.grid_type != GRID_TYPE_OBSTACLE and dest_y not in self.grid.main_channel_rows and dest_x not in self.grid.main_channel_columns and not cell.has_cargo:
-                        break
-                self.task_manager.add_task(task_type=TASK_TYPE_INBOUND, start_pos=entrance, end_pos=(dest_x, dest_y))
+                candidate_ends = []
+                for x in range(self.grid.width):
+                    for y in reversed(range(self.grid.height)):
+                        if y in main_channel_rows:
+                            continue
+                        cell = self.grid.get_cell(x, y)
+                        if cell and cell.grid_type != GRID_TYPE_OBSTACLE and not cell.has_cargo and (x, y) not in used_inbound:
+                            candidate_ends.append((x, y))
+                            break
+                if candidate_ends:
+                    end_pos = random.choice(candidate_ends)
+                    used_inbound.add(end_pos)
+                    self.task_manager.add_task(task_type=TASK_TYPE_INBOUND, start_pos=entrance, end_pos=end_pos)
             else:
+                # 出库任务：起点选每列靠近主通道的有货格
                 exit_pos = random.choice(exits)
-                while True:
-                    src_x, src_y = random.randint(0, self.grid.width - 1), random.randint(0, self.grid.height - 1)
-                    cell = self.grid.get_cell(src_x, src_y)
-                    if cell and cell.grid_type != GRID_TYPE_OBSTACLE and src_y not in self.grid.main_channel_rows and src_x not in self.grid.main_channel_columns and cell.has_cargo:
-                        break
-                self.task_manager.add_task(task_type=TASK_TYPE_OUTBOUND, start_pos=(src_x, src_y), end_pos=exit_pos)
+                candidate_starts = []
+                for x in range(self.grid.width):
+                    for y in range(self.grid.height):
+                        if y in main_channel_rows:
+                            continue
+                        cell = self.grid.get_cell(x, y)
+                        if cell and cell.grid_type != GRID_TYPE_OBSTACLE and cell.has_cargo and (x, y) not in used_outbound:
+                            candidate_starts.append((x, y))
+                            break
+                if candidate_starts:
+                    start_pos = random.choice(candidate_starts)
+                    used_outbound.add(start_pos)
+                    self.task_manager.add_task(task_type=TASK_TYPE_OUTBOUND, start_pos=start_pos, end_pos=exit_pos)
 
-    def save_tasks(self, tasks_filename: str, save_tasks: bool = True, save_map: bool = True) -> None:
-        """保存任务和地图到JSON文件"""
-        if save_tasks:
-            tasks_data = [{"id": task.id, "task_type": task.task_type, "start_position": task.start_position, "end_position": task.end_position, "priority": task.priority, "created_at": task.created_at.isoformat(), "status": task.status} for task in self.task_manager.tasks]
-            with open(tasks_filename, "w", encoding="utf-8") as f:
-                json.dump(tasks_data, f, indent=2, ensure_ascii=False)
+    def save_tasks(self, tasks_filename: str) -> None:
+        """仅保存任务到JSON文件"""
+        tasks_data = [
+            {
+                "id": task.id,
+                "task_type": task.task_type,
+                "start_position": task.start_position,
+                "end_position": task.end_position,
+                "priority": task.priority,
+                "created_at": task.created_at.isoformat(),
+                "status": task.status
+            }
+            for task in self.task_manager.tasks
+        ]
+        with open(tasks_filename, "w", encoding="utf-8") as f:
+            json.dump(tasks_data, f, indent=2, ensure_ascii=False)
 
-        if save_map:
-            map_filename = tasks_filename.replace("tasks.json", "map.json")
-            self.grid.save_to_json(map_filename)
+    def save_map(self, map_filename: str) -> None:
+        """仅保存地图到JSON文件"""
+        self.grid.save_to_json(map_filename)
 
-    def load_tasks(self, tasks_filename: str, load_map: bool = True) -> None:
-        """从JSON文件加载任务和地图"""
+    def load_tasks(self, tasks_filename: str) -> None:
+        """仅从JSON文件加载任务"""
         try:
             with open(tasks_filename, "r", encoding="utf-8") as f:
                 tasks_data = json.load(f)
             for task_data in tasks_data:
-                self.task_manager.tasks.append(TransportTask(id=task_data["id"], task_type=task_data["task_type"], start_position=tuple(task_data["start_position"]), end_position=tuple(task_data["end_position"]), priority=task_data["priority"], created_at=datetime.fromisoformat(task_data["created_at"]), status=task_data["status"]))
+                self.task_manager.tasks.append(
+                    TransportTask(
+                        id=task_data["id"],
+                        task_type=task_data["task_type"],
+                        start_position=tuple(task_data["start_position"]),
+                        end_position=tuple(task_data["end_position"]),
+                        priority=task_data["priority"],
+                        created_at=datetime.fromisoformat(task_data["created_at"]),
+                        status=task_data["status"]
+                    )
+                )
         except FileNotFoundError:
             print(f"任务文件 {tasks_filename} 未找到。开始时没有任务。")
 
-        if load_map:
-            map_filename = tasks_filename.replace("tasks.json", "map.json")
-            try:
-                self.grid.load_from_json(map_filename)
-            except FileNotFoundError:
-                print(f"地图文件 {map_filename} 未找到。无法加载地图。")
+    def load_map(self, map_filename: str) -> None:
+        """仅从JSON文件加载地图"""
+        try:
+            self.grid.load_from_json(map_filename)
+        except FileNotFoundError:
+            print(f"地图文件 {map_filename} 未找到。无法加载地图。")
 
     def assign_and_plan(self) -> str:
         """分配任务并规划路径"""
@@ -215,14 +257,17 @@ class Scheduler:
     def run(self, num_tasks: int, max_steps: int, load: bool = True) -> None:
         """运行调度模拟，每一步都生成图片"""
         tasks_filename = os.path.join(self.output_dir, "tasks.json")
+        map_filename = os.path.join(self.output_dir, "map.json")
 
         if load:
-            self.load_tasks(tasks_filename, load_map=True)
+            self.load_tasks(tasks_filename)
+            self.load_map(map_filename)
         else:
             self.load_from_xlsx("resource/map4.xlsx")
-            self.genarate_cargo()
+            self.genarate_cargo(20)
             self.generate_tasks(num_tasks)
-            self.save_tasks(tasks_filename, save_tasks=True, save_map=True)
+            self.save_tasks(tasks_filename)
+            self.save_map(map_filename)
 
         self.initialize()
 
@@ -247,5 +292,5 @@ class Scheduler:
 
 if __name__ == "__main__":
     scheduler = Scheduler(num_vehicles=4)
-    scheduler.run(num_tasks=4, max_steps=500, load=True)
+    scheduler.run(num_tasks=8, max_steps=500, load=False)
 
