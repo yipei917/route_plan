@@ -1,77 +1,77 @@
 [
   {
     "id": "T001",
-    "task_type": "outbound",
+    "task_type": "inbound",
     "start_position": [
-      56,
-      22
-    ],
-    "end_position": [
-      13,
+      41,
       46
     ],
+    "end_position": [
+      58,
+      50
+    ],
     "priority": 0,
-    "created_at": "2025-06-09T17:25:16.343421",
+    "created_at": "2025-06-09T22:13:46.603647",
     "status": "pending"
   },
   {
     "id": "T002",
     "task_type": "inbound",
     "start_position": [
-      2,
-      8
+      13,
+      46
     ],
     "end_position": [
-      22,
+      20,
       50
     ],
     "priority": 0,
-    "created_at": "2025-06-09T17:25:16.343421",
+    "created_at": "2025-06-09T22:13:46.603658",
     "status": "pending"
   },
   {
     "id": "T003",
-    "task_type": "outbound",
-    "start_position": [
-      43,
-      22
-    ],
-    "end_position": [
-      41,
-      46
-    ],
-    "priority": 0,
-    "created_at": "2025-06-09T17:25:16.343421",
-    "status": "pending"
-  },
-  {
-    "id": "T004",
-    "task_type": "outbound",
-    "start_position": [
-      38,
-      22
-    ],
-    "end_position": [
-      2,
-      6
-    ],
-    "priority": 0,
-    "created_at": "2025-06-09T17:25:16.343421",
-    "status": "pending"
-  },
-  {
-    "id": "T005",
     "task_type": "inbound",
     "start_position": [
       41,
       46
     ],
     "end_position": [
-      55,
+      58,
+      49
+    ],
+    "priority": 0,
+    "created_at": "2025-06-09T22:13:46.603661",
+    "status": "pending"
+  },
+  {
+    "id": "T004",
+    "task_type": "inbound",
+    "start_position": [
+      2,
+      6
+    ],
+    "end_position": [
+      26,
       50
     ],
     "priority": 0,
-    "created_at": "2025-06-09T17:25:16.343421",
+    "created_at": "2025-06-09T22:13:46.603664",
+    "status": "pending"
+  },
+  {
+    "id": "T005",
+    "task_type": "outbound",
+    "start_position": [
+      18,
+      21
+    ],
+    "end_position": [
+      2,
+      8
+    ],
+    "priority": 0,
+    "created_at": "2025-06-09T22:13:46.603669",
     "status": "pending"
   }
 ]

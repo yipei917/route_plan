@@ -297,7 +297,7 @@ class Scheduler:
         while step <= max_steps:
             print(f"\n=== 模拟步骤 {step} ===")
             self.assign_and_plan()
-            self.move_idle_vehicles_to_normal_channel()  # 调用新函数
+            # self.move_idle_vehicles_to_normal_channel()  # 调用新函数
 
             if not self.simulate_step():
                 print("没有活动车辆，模拟结束")
@@ -305,9 +305,8 @@ class Scheduler:
 
             # 检查任务状态
             pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
-            active_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_IN_PROGRESS)
 
-            if not pending_tasks and not active_tasks and total_tasks_generated < num_tasks:
+            if not pending_tasks and total_tasks_generated < num_tasks:
                 remaining_tasks = num_tasks - total_tasks_generated
                 tasks_to_generate = min(6, remaining_tasks)  # 每次生成最多6个任务
                 self.generate_tasks(tasks_to_generate)
