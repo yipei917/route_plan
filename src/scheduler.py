@@ -3,6 +3,7 @@ from datetime import datetime
 import random
 import json
 import os
+import openpyxl
 from .models.grid import Grid, GridCell, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE, GRID_TYPE_NORMAL_CHANNEL
 from .models.task import (
     TaskManager,
@@ -193,7 +194,7 @@ class Scheduler:
                     print(f"任务 {task.id} 已分配给车辆 {vehicle.id}, 路径: {vehicle.get_path_str()}")
                     # self.visualize(f"assign_{task.id}_part_1.png")
                     break
-            else: print(f"任务 {task.id} 暂无可用车辆或所有车辆均无法到达")
+            # else: print(f"任务 {task.id} 暂无可用车辆或所有车辆均无法到达")
         return SYSTEM_STATUS_WORKING if assigned_any else SYSTEM_STATUS_BUSY
 
     def move_idle_vehicles_to_normal_channel(self) -> None:
@@ -281,8 +282,7 @@ class Scheduler:
             self.load_map(map_filename)
         else:
             self.load_from_xlsx("resource/map4.xlsx")
-            self.genarate_cargo(20)
-            self.generate_tasks(min(6, num_tasks))  # 初始生成最多6个任务
+            self.load_tasks_from_xlsx("resource/task1.xlsx")  # 使用新的函数读取任务
             self.save_tasks(tasks_filename)
             self.save_map(map_filename)
 
@@ -303,26 +303,56 @@ class Scheduler:
                 print("没有活动车辆，模拟结束")
                 break
 
-            # 检查任务状态
-            pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
+            # # 检查任务状态
+            # pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
 
-            if not pending_tasks and total_tasks_generated < num_tasks:
-                remaining_tasks = num_tasks - total_tasks_generated
-                tasks_to_generate = min(6, remaining_tasks)  # 每次生成最多6个任务
-                self.generate_tasks(tasks_to_generate)
-                total_tasks_generated += tasks_to_generate
-                print(f"生成了 {tasks_to_generate} 个新任务，总任务数达到 {total_tasks_generated}")
+            # if not pending_tasks and total_tasks_generated < num_tasks:
+            #     remaining_tasks = num_tasks - total_tasks_generated
+            #     tasks_to_generate = min(6, remaining_tasks)  # 每次生成最多6个任务
+            #     self.generate_tasks(tasks_to_generate)
+            #     total_tasks_generated += tasks_to_generate
+            #     print(f"生成了 {tasks_to_generate} 个新任务，总任务数达到 {total_tasks_generated}")
 
             # self.visualize(f"step_{step}.png")
             step += 1
 
     def load_from_xlsx(self, filename: str) -> None:
-        """从Excel文件加载地图和任务"""
+        """从Excel文件加载地图"""
         self.grid.load_map_from_excel(filename)
+
+    def load_tasks_from_xlsx(self, filename: str) -> None:
+        """从Excel文件加载任务"""
+        try:
+            workbook = openpyxl.load_workbook(filename)
+            sheet = workbook.active
+
+            for row in sheet.iter_rows(min_row=2, values_only=True):  # 跳过表头
+                task_type, start_x, start_y, end_x, end_y = row
+                start_position = (start_x, start_y)
+                end_position = (end_x, end_y)
+
+                if task_type.lower() == "inbound":
+                    self.task_manager.add_task(
+                        task_type=TASK_TYPE_INBOUND,
+                        start_pos=start_position,
+                        end_pos=end_position
+                    )
+                elif task_type.lower() == "outbound":
+                    self.task_manager.add_task(
+                        task_type=TASK_TYPE_OUTBOUND,
+                        start_pos=start_position,
+                        end_pos=end_position
+                    )
+                else:
+                    print(f"未知任务类型: {task_type}")
+        except FileNotFoundError:
+            print(f"任务文件 {filename} 未找到。无法加载任务。")
+        except Exception as e:
+            print(f"加载任务时发生错误: {e}")
 
 
 if __name__ == "__main__":
     scheduler = Scheduler(num_vehicles=4)
-    scheduler.run(num_tasks=20, max_steps=2000, load=False)
+    scheduler.run(num_tasks=20, max_steps=100000000, load=False)
     # scheduler.visualize("final_state.png")
 

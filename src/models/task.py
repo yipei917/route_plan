@@ -89,17 +89,20 @@ class TaskManager:
         return sorted(available_tasks,
                       key=lambda t: (-t.priority, t.created_at))[0]
 
-    def get_tasks_by_status(self, status: str) -> List[TransportTask]:
+    def get_tasks_by_status(self, status: str, verbose: bool = False) -> List[TransportTask]:
         """Get all tasks with specified status"""
-        print(f"\n=== 获取状态为 {status} 的任务 ===")
-        print(f"当前所有任务:")
-        for task in self.tasks:
-            print(f"任务 {task.id}: 类型={task.task_type}, 状态={task.status}")
+        if verbose:
+            print(f"\n=== 获取状态为 {status} 的任务 ===")
+            print(f"当前所有任务:")
+            for task in self.tasks:
+                print(f"任务 {task.id}: 类型={task.task_type}, 状态={task.status}")
 
         matching_tasks = [t for t in self.tasks if t.status == status]
-        print(f"找到 {len(matching_tasks)} 个匹配的任务")
-        for task in matching_tasks:
-            print(f"匹配任务 {task.id}: 类型={task.task_type}, 状态={task.status}")
+
+        if verbose:
+            print(f"找到 {len(matching_tasks)} 个匹配的任务")
+            for task in matching_tasks:
+                print(f"匹配任务 {task.id}: 类型={task.task_type}, 状态={task.status}")
 
         return matching_tasks
 
