@@ -172,7 +172,7 @@ class Scheduler:
 
     def assign_and_plan(self) -> str:
         """分配任务并规划路径"""
-        pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
+        pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)[:10]
         if not pending_tasks: print("无可分配任务"); return SYSTEM_STATUS_WORKING
 
         idle_vehicles = [vehicle for vehicle in self.vehicles if vehicle.status == VEHICLE_STATUS_IDLE]
