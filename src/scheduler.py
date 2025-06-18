@@ -69,75 +69,9 @@ class Scheduler:
             self.constraint_manager.add_vehicle(vehicle)
             self.grid_visualizer.add_vehicle(vehicle)
         
-    def genarate_cargo(self, fill_rows: int = None) -> None:
-        """按列顺序填满货物，可指定每列填满前N行"""
-        obstacle_positions = [(x, y) for (x, y), cell in self.grid.cells.items() if cell.grid_type == GRID_TYPE_OBSTACLE]
-        main_channel_positions = [(x, y) for (x, y), cell in self.grid.cells.items() if cell.grid_type == GRID_TYPE_MAIN_CHANNEL]
-
-        for x in range(self.grid.width):
-            filled = 0
-            for y in range(self.grid.height):
-                pos = (x, y)
-                if pos in obstacle_positions or pos in main_channel_positions:
-                    continue
-                if fill_rows is not None and filled >= fill_rows:
-                    break
-                self.grid.set_cargo(x, y, True)
-                filled += 1
-
-    def generate_tasks(self, num_tasks: int, seed: Optional[int] = None) -> None:
-        """生成任务，入库任务选择离主通道最远的地方，出库任务选择离主通道最近的有货地方，任务之间不能冲突"""
-        if seed is not None:
-            random.seed(seed)
-
-        entrances, exits = self.grid.get_all_entrances(), self.grid.get_all_exits()
-        main_channel_rows = [7, 14, 25]  # 固定主通道行为
-        used_inbound = set()  # 记录已使用的入库终点
-        used_outbound = set()  # 记录已使用的出库起点
-
-        for _ in range(num_tasks):
-            x = random.randint(0, self.grid.width - 1)
-            y = random.randint(0, self.grid.height - 1)
-
-            # 寻找最近的主通道行
-            closest_mainrow = min(main_channel_rows, key=lambda row: abs(row - y))
-
-            if random.choice([True, False]):  # 入库任务
-                entrance = random.choice(entrances)
-                for target_y in reversed(range(self.grid.height)):  # 从远端开始寻找
-                    if target_y > closest_mainrow:  # 远离主通道行
-                        cell = self.grid.get_cell(x, target_y)
-                        if cell and cell.grid_type != GRID_TYPE_OBSTACLE and not cell.has_cargo and target_y not in main_channel_rows and (x, target_y) not in used_inbound:
-                            self.task_manager.add_task(task_type=TASK_TYPE_INBOUND, start_pos=entrance, end_pos=(x, target_y))
-                            used_inbound.add((x, target_y))  # 标记该位置为已使用
-                            break
-            else:  # 出库任务
-                exit_pos = random.choice(exits)
-                # 从 closest_mainrow-1 向下一个 main_channel_row+1（不含）方向寻找
-                next_mainrow = max([row for row in main_channel_rows if row < closest_mainrow], default=-1)
-                for target_y in range(closest_mainrow - 1, next_mainrow, -1):
-                    cell = self.grid.get_cell(x, target_y)
-                    if cell and cell.grid_type != GRID_TYPE_OBSTACLE and cell.has_cargo and target_y not in main_channel_rows and (x, target_y) not in used_outbound:
-                        self.task_manager.add_task(task_type=TASK_TYPE_OUTBOUND, start_pos=(x, target_y), end_pos=exit_pos)
-                        used_outbound.add((x, target_y))  # 标记该位置为已使用
-                        break
-
     def save_tasks(self, tasks_filename: str) -> None:
         """仅保存任务到JSON文件"""
-        tasks_data = [
-            {
-                "id": task.id,
-                "task_type": task.task_type,
-                "start_position": task.start_position,
-                "end_position": task.end_position,
-                "priority": task.priority,
-                "created_at": task.created_at.isoformat(),
-                "status": task.status
-            }
-            for task in self.task_manager.tasks
-        ]
-        with open(tasks_filename, "w", encoding="utf-8") as f:
-            json.dump(tasks_data, f, indent=2, ensure_ascii=False)
+        self.task_manager.save_tasks(tasks_filename)
 
     def save_map(self, map_filename: str) -> None:
         """仅保存地图到JSON文件"""
@@ -146,20 +80,7 @@ class Scheduler:
     def load_tasks(self, tasks_filename: str) -> None:
         """仅从JSON文件加载任务"""
         try:
-            with open(tasks_filename, "r", encoding="utf-8") as f:
-                tasks_data = json.load(f)
-            for task_data in tasks_data:
-                self.task_manager.tasks.append(
-                    TransportTask(
-                        id=task_data["id"],
-                        task_type=task_data["task_type"],
-                        start_position=tuple(task_data["start_position"]),
-                        end_position=tuple(task_data["end_position"]),
-                        priority=task_data["priority"],
-                        created_at=datetime.fromisoformat(task_data["created_at"]),
-                        status=task_data["status"]
-                    )
-                )
+            self.task_manager.load_tasks(tasks_filename)
         except FileNotFoundError:
             print(f"任务文件 {tasks_filename} 未找到。开始时没有任务。")
 
@@ -170,9 +91,17 @@ class Scheduler:
         except FileNotFoundError:
             print(f"地图文件 {map_filename} 未找到。无法加载地图。")
 
+    def load_from_xlsx(self, filename: str) -> None:
+        """从Excel文件加载地图"""
+        self.grid.load_map_from_excel(filename)
+
+    def load_tasks_from_xlsx(self, filename: str) -> None:
+        """从Excel文件加载任务"""
+        self.task_manager.load_tasks_from_xlsx(filename)
+
     def assign_and_plan(self) -> str:
         """分配任务并规划路径"""
-        pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)[:10]
+        pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
         if not pending_tasks: print("无可分配任务"); return SYSTEM_STATUS_WORKING
 
         idle_vehicles = [vehicle for vehicle in self.vehicles if vehicle.status == VEHICLE_STATUS_IDLE]
@@ -316,43 +245,9 @@ class Scheduler:
             # self.visualize(f"step_{step}.png")
             step += 1
 
-    def load_from_xlsx(self, filename: str) -> None:
-        """从Excel文件加载地图"""
-        self.grid.load_map_from_excel(filename)
-
-    def load_tasks_from_xlsx(self, filename: str) -> None:
-        """从Excel文件加载任务"""
-        try:
-            workbook = openpyxl.load_workbook(filename)
-            sheet = workbook.active
-
-            for row in sheet.iter_rows(min_row=2, values_only=True):  # 跳过表头
-                task_type, start_x, start_y, end_x, end_y = row
-                start_position = (start_x, start_y)
-                end_position = (end_x, end_y)
-
-                if task_type.lower() == "inbound":
-                    self.task_manager.add_task(
-                        task_type=TASK_TYPE_INBOUND,
-                        start_pos=start_position,
-                        end_pos=end_position
-                    )
-                elif task_type.lower() == "outbound":
-                    self.task_manager.add_task(
-                        task_type=TASK_TYPE_OUTBOUND,
-                        start_pos=start_position,
-                        end_pos=end_position
-                    )
-                else:
-                    print(f"未知任务类型: {task_type}")
-        except FileNotFoundError:
-            print(f"任务文件 {filename} 未找到。无法加载任务。")
-        except Exception as e:
-            print(f"加载任务时发生错误: {e}")
-
 
 if __name__ == "__main__":
-    scheduler = Scheduler(num_vehicles=4)
+    scheduler = Scheduler(num_vehicles=1)
     scheduler.run(num_tasks=20, max_steps=100000000, load=False)
     # scheduler.visualize("final_state.png")
 
