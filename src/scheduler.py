@@ -121,7 +121,6 @@ class Scheduler:
                     self.constraint_manager.add_path(vehicle, path_to_start)
                     assigned_any = True
                     print(f"任务 {task.id} 已分配给车辆 {vehicle.id}, 路径: {vehicle.get_path_str()}")
-                    # self.visualize(f"assign_{task.id}_part_1.png")
                     break
             # else: print(f"任务 {task.id} 暂无可用车辆或所有车辆均无法到达")
         return SYSTEM_STATUS_WORKING if assigned_any else SYSTEM_STATUS_BUSY
@@ -201,8 +200,8 @@ class Scheduler:
         full_path = os.path.join(self.output_dir, filename)
         self.grid_visualizer.save(full_path)
 
-    def run(self, num_tasks: int, max_steps: int, load: bool = True) -> None:
-        """运行调度模拟，每次生成6个任务，任务全部完成后再生成，总任务数不超过num_tasks"""
+    def run(self, max_steps: int, load: bool = True) -> None:
+        """运行调度模拟，从指定任务开始"""
         tasks_filename = os.path.join(self.output_dir, "tasks.json")
         map_filename = os.path.join(self.output_dir, "map.json")
 
@@ -211,43 +210,28 @@ class Scheduler:
             self.load_map(map_filename)
         else:
             self.load_from_xlsx("resource/map4.xlsx")
-            self.load_tasks_from_xlsx("resource/task1.xlsx")  # 使用新的函数读取任务
-            self.save_tasks(tasks_filename)
-            self.save_map(map_filename)
+            self.load_tasks_from_xlsx("resource/task1.xlsx")
 
         self.initialize()
 
+
         step = 0
-        total_tasks_generated = len(self.task_manager.tasks)  # 记录已生成任务数
         print(f"\n=== 初始状态（步骤 {step}） ===")
-        # self.visualize(f"step_{step}.png")
         step += 1
 
         while step <= max_steps:
             print(f"\n=== 模拟步骤 {step} ===")
             self.assign_and_plan()
-            # self.move_idle_vehicles_to_normal_channel()  # 调用新函数
 
             if not self.simulate_step():
                 print("没有活动车辆，模拟结束")
                 break
 
-            # # 检查任务状态
-            # pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
-
-            # if not pending_tasks and total_tasks_generated < num_tasks:
-            #     remaining_tasks = num_tasks - total_tasks_generated
-            #     tasks_to_generate = min(6, remaining_tasks)  # 每次生成最多6个任务
-            #     self.generate_tasks(tasks_to_generate)
-            #     total_tasks_generated += tasks_to_generate
-            #     print(f"生成了 {tasks_to_generate} 个新任务，总任务数达到 {total_tasks_generated}")
-
-            # self.visualize(f"step_{step}.png")
             step += 1
 
 
 if __name__ == "__main__":
     scheduler = Scheduler(num_vehicles=1)
-    scheduler.run(num_tasks=20, max_steps=100000000, load=False)
+    scheduler.run(max_steps=100000000, load=False)
     # scheduler.visualize("final_state.png")
 
