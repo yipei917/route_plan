@@ -1,28 +1,9 @@
 from typing import List, Dict, Optional
-from datetime import datetime
 import random
-import json
 import os
-import openpyxl
-from .models.grid import Grid, GridCell, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE, GRID_TYPE_NORMAL_CHANNEL
-from .models.task import (
-    TaskManager,
-    TransportTask,
-    TASK_TYPE_INBOUND,
-    TASK_TYPE_OUTBOUND,
-    TASK_STATUS_PENDING,
-    TASK_STATUS_IN_PROGRESS
-)
-from .models.vehicle import (
-    Vehicle,
-    VEHICLE_TYPE_EMPTY,
-    VEHICLE_TYPE_LOADED,
-    VEHICLE_STATUS_IDLE,
-    VEHICLE_STATUS_MOVING,
-    VEHICLE_STATUS_LOADING,
-    VEHICLE_STATUS_UNLOADING,
-    VEHICLE_STATUS_WAITING,
-)
+from .models.grid import Grid, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE, GRID_TYPE_NORMAL_CHANNEL
+from .models.task import TaskManager, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TASK_STATUS_PENDING, TASK_STATUS_IN_PROGRESS
+from .models.vehicle import Vehicle, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, VEHICLE_STATUS_IDLE, VEHICLE_STATUS_MOVING, VEHICLE_STATUS_LOADING, VEHICLE_STATUS_UNLOADING, VEHICLE_STATUS_WAITING
 from .models.constraints import ConstraintManager, PhysicalConstraint
 from .algorithms.a_star import AStarPlanner
 from .utils.visualizer import GridVisualizer
@@ -124,28 +105,6 @@ class Scheduler:
                     break
             # else: print(f"任务 {task.id} 暂无可用车辆或所有车辆均无法到达")
         return SYSTEM_STATUS_WORKING if assigned_any else SYSTEM_STATUS_BUSY
-
-    def move_idle_vehicles_to_normal_channel(self) -> None:
-        """将空闲车辆从主干道移动到最近的普通通道"""
-        for vehicle in self.vehicles:
-            if vehicle.status == VEHICLE_STATUS_IDLE:
-                current_cell = self.grid.get_cell(*vehicle.current_position)
-                if current_cell and current_cell.grid_type == GRID_TYPE_MAIN_CHANNEL:
-                    # 找到最近的普通通道
-                    normal_channel_positions = [
-                        (x, y) for (x, y), cell in self.grid.cells.items()
-                        if cell.grid_type == GRID_TYPE_NORMAL_CHANNEL
-                    ]
-                    closest_position = min(
-                        normal_channel_positions,
-                        key=lambda pos: abs(pos[0] - vehicle.current_position[0]) + abs(pos[1] - vehicle.current_position[1]),
-                    )
-                    path_to_normal_channel = self.path_planner.find_path(vehicle, vehicle.current_position, closest_position)
-                    if path_to_normal_channel:
-                        vehicle.set_path(path_to_normal_channel)
-                        vehicle.status = VEHICLE_STATUS_MOVING
-                        self.constraint_manager.add_path(vehicle, path_to_normal_channel)
-                        print(f"车辆 {vehicle.id} 从主干道移动到普通通道 {closest_position}")
 
     def simulate_step(self) -> bool:
         """模拟一步，更新车辆位置"""
