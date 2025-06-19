@@ -2,16 +2,11 @@ from typing import List, Dict, Optional
 import random
 import os
 from .models.grid import Grid, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE, GRID_TYPE_NORMAL_CHANNEL
-from .models.task import TaskManager, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TASK_STATUS_PENDING, TASK_STATUS_IN_PROGRESS
-from .models.vehicle import Vehicle, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, VEHICLE_STATUS_IDLE, VEHICLE_STATUS_MOVING, VEHICLE_STATUS_LOADING, VEHICLE_STATUS_UNLOADING, VEHICLE_STATUS_WAITING
+from .models.task import TaskManager, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TASK_STATUS_PENDING
+from .models.vehicle import Vehicle, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, VEHICLE_STATUS_IDLE, VEHICLE_STATUS_WAITING, VEHICLE_STATUS_WORKING
 from .models.constraints import ConstraintManager, PhysicalConstraint
 from .algorithms.a_star import AStarPlanner
 from .utils.visualizer import GridVisualizer
-
-SYSTEM_STATUS_COMPLETED = "completed"
-SYSTEM_STATUS_BUSY = "busy"
-SYSTEM_STATUS_WORKING = "working"
-
 
 class Scheduler:
     """调度器类，管理任务分配和路径规划"""
@@ -83,10 +78,14 @@ class Scheduler:
     def assign_and_plan(self) -> str:
         """分配任务并规划路径"""
         pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
-        if not pending_tasks: print("无可分配任务"); return SYSTEM_STATUS_WORKING
+        if not pending_tasks: 
+            print("无可分配任务"); 
+            return
 
         idle_vehicles = [vehicle for vehicle in self.vehicles if vehicle.status == VEHICLE_STATUS_IDLE]
-        if not idle_vehicles: print("无空闲车辆"); return SYSTEM_STATUS_BUSY
+        if not idle_vehicles: 
+            print("无空闲车辆"); 
+            return
 
         assigned_any = False
         for task in pending_tasks:
@@ -97,18 +96,17 @@ class Scheduler:
                 if vehicle.assign_task(task):
                     vehicle.set_path(path_to_start)
                     vehicle.start_task()
-                    vehicle.status = VEHICLE_STATUS_LOADING
                     idle_vehicles.remove(vehicle)
                     self.constraint_manager.add_path(vehicle, path_to_start)
                     assigned_any = True
                     print(f"任务 {task.id} 已分配给车辆 {vehicle.id}, 路径: {vehicle.get_path_str()}")
                     break
             # else: print(f"任务 {task.id} 暂无可用车辆或所有车辆均无法到达")
-        return SYSTEM_STATUS_WORKING if assigned_any else SYSTEM_STATUS_BUSY
+        return
 
     def simulate_step(self) -> bool:
         """模拟一步，更新车辆位置"""
-        active_vehicles = [v for v in self.vehicles if v.status in (VEHICLE_STATUS_WAITING, VEHICLE_STATUS_MOVING, VEHICLE_STATUS_LOADING, VEHICLE_STATUS_UNLOADING)]
+        active_vehicles = [v for v in self.vehicles if v.status in (VEHICLE_STATUS_WAITING, VEHICLE_STATUS_WORKING)]
         if not active_vehicles: return False
 
         for vehicle in active_vehicles:
@@ -134,12 +132,11 @@ class Scheduler:
                 path_to_end = self.path_planner.find_path(vehicle, vehicle.current_position, task.end_position)
                 if path_to_end:
                     vehicle.set_path(path_to_end)
-                    vehicle.status = VEHICLE_STATUS_UNLOADING
+                    vehicle.status = VEHICLE_STATUS_WORKING
                     self.constraint_manager.add_path(vehicle, path_to_end)
                 else:
                     print(f"车辆 {vehicle.id} 无法从起点{vehicle.current_position}到终点{task.end_position}，任务无法完成，task: {task.id}")
                     vehicle.set_waiting()
-                    vehicle.status = VEHICLE_STATUS_WAITING
 
             elif vehicle.current_position == task.end_position:
                 if task.task_type == TASK_TYPE_OUTBOUND: vehicle.vehicle_type = VEHICLE_TYPE_EMPTY

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Dict
 from .grid import Grid, GRID_TYPE_OBSTACLE, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL
-from .vehicle import Vehicle, VEHICLE_STATUS_WAITING
+from .vehicle import Vehicle
 
 
 class Constraint(ABC):

@@ -11,7 +11,6 @@ GRID_TYPE_NORMAL_CHANNEL = "normal_channel"
 GRID_TYPE_MAIN_CHANNEL = "main_channel"
 GRID_TYPE_OBSTACLE = "obstacle"
 
-
 @dataclass
 class GridCell:
     x: int
@@ -38,7 +37,6 @@ class GridCell:
             return not self.has_cargo
 
         return False
-
 
 class Grid:
     def __init__(self, width: int, height: int):

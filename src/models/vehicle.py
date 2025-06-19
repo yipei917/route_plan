@@ -12,6 +12,7 @@ VEHICLE_STATUS_MOVING = "moving"
 VEHICLE_STATUS_LOADING = "loading"
 VEHICLE_STATUS_UNLOADING = "unloading"
 VEHICLE_STATUS_WAITING = "waiting"
+VEHICLE_STATUS_WORKING = "working"
 
 @dataclass
 class Vehicle:
@@ -32,7 +33,6 @@ class Vehicle:
             self.path = []
         if self.task_history is None:
             self.task_history = []
-
 
     def assign_task(self, task: TransportTask) -> bool:
         """Assign a task to the vehicle"""
@@ -95,7 +95,7 @@ class Vehicle:
             # 更新任务状态
             self.current_task.start_execution()
             # 更新车辆状态
-            self.status = VEHICLE_STATUS_MOVING
+            self.status = VEHICLE_STATUS_WORKING
             print(f"任务启动完成")
             print(f"车辆状态: {self.status}")
             print(f"任务状态: {self.current_task.status}")
@@ -180,25 +180,8 @@ class Vehicle:
         else:
             return self.path[self.current_path_index] if self.path else None
 
-    def get_current_task_info(self) -> dict:
-        """Get current task information"""
-        if not self.current_task:
-            return {
-                "task_id": None,
-                "task_type": None,
-                "status": None,
-                "progress": None
-            }
-            
-        return {
-            "task_id": self.current_task.id,
-            "task_type": self.current_task.task_type,
-            "status": self.current_task.status,
-            "progress": self._calculate_progress()
-        }
-    
     def is_empty(self) -> bool:
-        """检查是否为空车"""
+        """检查车辆是否为空"""
         return self.vehicle_type == VEHICLE_TYPE_EMPTY
 
     def get_path_str(self) -> str:
@@ -207,7 +190,3 @@ class Vehicle:
             return ""
         return " -> ".join(f"({x},{y})" for x, y in self.path)
 
-    def __str__(self) -> str:
-        """String representation of the vehicle"""
-        return (f"Vehicle {self.id} ({self.vehicle_type}, {self.task_type}) - "
-                f"Status: {self.status}")
