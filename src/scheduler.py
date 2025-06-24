@@ -75,7 +75,7 @@ class Scheduler:
         """从Excel文件加载任务"""
         self.task_manager.load_tasks_from_xlsx(filename)
 
-    def assign_and_plan(self) -> str:
+    def assign_and_plan(self):
         """分配任务并规划路径"""
         pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
         if not pending_tasks: 
@@ -166,7 +166,7 @@ class Scheduler:
             self.load_map(map_filename)
         else:
             self.load_from_xlsx("resource/map4.xlsx")
-            self.load_tasks_from_xlsx("resource/task1.xlsx")
+            self.load_tasks_from_xlsx("resource/task2.xlsx")
 
         self.initialize()
 
