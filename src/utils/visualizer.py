@@ -1,15 +1,15 @@
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import matplotlib.patches as patches
-from typing import List
+from typing import List, Tuple
 from src.models.grid import Grid, GRID_TYPE_NORMAL_CHANNEL, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE
 from src.models.vehicle import Vehicle
 
 class GridVisualizer:
     """网格可视化器"""
-    def __init__(self, grid: Grid):
+    def __init__(self, grid: Grid, figsize: Tuple[int, int] = (300, 200)):
         self.grid = grid
-        self.fig, self.ax = plt.subplots(figsize=(300, 200))
+        self.fig, self.ax = plt.subplots(figsize=figsize)
         self.vehicles: List[Vehicle] = []
         
         # 设置颜色映射

@@ -175,10 +175,10 @@ class Vehicle:
 
     def get_next_position(self) -> Optional[Tuple[int, int]]:
         """获取下一个位置"""
-        if self.current_path_index >= len(self.path):
+        if self.current_path_index + 1 >= len(self.path):
             return None
         else:
-            return self.path[self.current_path_index] if self.path else None
+            return self.path[self.current_path_index + 1] if self.path else None
 
     def is_empty(self) -> bool:
         """检查车辆是否为空"""
@@ -190,3 +190,8 @@ class Vehicle:
             return ""
         return " -> ".join(f"({x},{y})" for x, y in self.path)
 
+    def get_remaining_path(self) -> List[Tuple[int, int]]:
+        """获取车辆的剩余路径"""
+        if not self.path or self.current_path_index >= len(self.path):
+            return []
+        return self.path[self.current_path_index:]

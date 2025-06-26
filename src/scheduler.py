@@ -44,36 +44,6 @@ class Scheduler:
             self.vehicles.append(vehicle)
             self.constraint_manager.add_vehicle(vehicle)
             self.grid_visualizer.add_vehicle(vehicle)
-        
-    def save_tasks(self, tasks_filename: str) -> None:
-        """仅保存任务到JSON文件"""
-        self.task_manager.save_tasks(tasks_filename)
-
-    def save_map(self, map_filename: str) -> None:
-        """仅保存地图到JSON文件"""
-        self.grid.save_to_json(map_filename)
-
-    def load_tasks(self, tasks_filename: str) -> None:
-        """仅从JSON文件加载任务"""
-        try:
-            self.task_manager.load_tasks(tasks_filename)
-        except FileNotFoundError:
-            print(f"任务文件 {tasks_filename} 未找到。开始时没有任务。")
-
-    def load_map(self, map_filename: str) -> None:
-        """仅从JSON文件加载地图"""
-        try:
-            self.grid.load_from_json(map_filename)
-        except FileNotFoundError:
-            print(f"地图文件 {map_filename} 未找到。无法加载地图。")
-
-    def load_from_xlsx(self, filename: str) -> None:
-        """从Excel文件加载地图"""
-        self.grid.load_map_from_excel(filename)
-
-    def load_tasks_from_xlsx(self, filename: str) -> None:
-        """从Excel文件加载任务"""
-        self.task_manager.load_tasks_from_xlsx(filename)
 
     def assign_and_plan(self):
         """分配任务并规划路径"""
@@ -87,7 +57,6 @@ class Scheduler:
             print("无空闲车辆"); 
             return
 
-        assigned_any = False
         for task in pending_tasks:
             sorted_vehicles = sorted(idle_vehicles, key=lambda v: abs(v.current_position[0] - task.start_position[0]) + abs(v.current_position[1] - task.start_position[1]))
             for vehicle in sorted_vehicles:
@@ -98,7 +67,6 @@ class Scheduler:
                     vehicle.start_task()
                     idle_vehicles.remove(vehicle)
                     self.constraint_manager.add_path(vehicle, path_to_start)
-                    assigned_any = True
                     print(f"任务 {task.id} 已分配给车辆 {vehicle.id}, 路径: {vehicle.get_path_str()}")
                     break
             # else: print(f"任务 {task.id} 暂无可用车辆或所有车辆均无法到达")
@@ -162,14 +130,13 @@ class Scheduler:
         map_filename = os.path.join(self.output_dir, "map.json")
 
         if load:
-            self.load_tasks(tasks_filename)
-            self.load_map(map_filename)
+            self.grid.load_from_json(map_filename)
+            self.task_manager.load_tasks(tasks_filename)
         else:
-            self.load_from_xlsx("resource/map4.xlsx")
-            self.load_tasks_from_xlsx("resource/task2.xlsx")
+            self.grid.load_map_from_excel("resource/map4.xlsx")
+            self.task_manager.load_tasks_from_xlsx("resource/task2.xlsx")
 
         self.initialize()
-
 
         step = 0
         print(f"\n=== 初始状态（步骤 {step}） ===")

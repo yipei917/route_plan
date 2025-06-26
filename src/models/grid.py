@@ -58,6 +58,12 @@ class Grid:
         if (x, y) in self.cells:
             self.cells[(x, y)].grid_type = grid_type
 
+    def get_cell_type(self, target_position: Tuple[int, int]) -> str:
+        """获取格子类型"""
+        if target_position in self.cells:
+            return self.cells[target_position].grid_type
+        return ""
+
     def set_cell_directions(self, x: int, y: int, directions: List[str]) -> None:
         """设置格子允许的方向"""
         if (x, y) in self.cells:
