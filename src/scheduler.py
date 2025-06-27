@@ -182,7 +182,7 @@ class Scheduler:
 
 
 if __name__ == "__main__":
-    scheduler = Scheduler(num_vehicles=2)
+    scheduler = Scheduler(num_vehicles=1)
     # 运行task2，会在normal类型的格子中填满货物
     scheduler.run(max_steps=100000000, load=False, task_id=2)
     # scheduler.visualize("final_state.png")
