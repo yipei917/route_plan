@@ -90,6 +90,14 @@ class Scheduler:
                 self.constraint_manager.remove_path(vehicle)
                 continue
 
+            if self.grid.get_cell_type(vehicle.current_position) == GRID_TYPE_MAIN_CHANNEL:
+                self.constraint_manager.remove_path(vehicle)
+                path_remaining = vehicle.get_remaining_path()
+                if path_remaining:
+                    print(f"剩余路径: {path_remaining}")
+                    vehicle.set_path(path_remaining)
+                    self.constraint_manager.add_path(vehicle, path_remaining)
+
             if vehicle.current_position == task.start_position:
                 if task.task_type == TASK_TYPE_OUTBOUND:
                     self.grid.set_cargo(*task.start_position, False)
@@ -124,8 +132,28 @@ class Scheduler:
         full_path = os.path.join(self.output_dir, filename)
         self.grid_visualizer.save(full_path)
 
-    def run(self, max_steps: int, load: bool = True) -> None:
-        """运行调度模拟，从指定任务开始"""
+    def switch_task(self, task_id: int) -> None:
+        if task_id == 1:
+            self.task_manager.load_tasks_from_xlsx("resource/task1.xlsx")
+        elif task_id == 2:
+            # 在加载任务前，先在normal类型的格子中填满货物
+            for (x, y), cell in self.grid.cells.items():
+                if cell.grid_type == GRID_TYPE_NORMAL_CHANNEL:
+                    self.grid.set_cargo(x, y, True)
+            self.task_manager.load_tasks_from_xlsx("resource/task2.xlsx")
+        elif task_id == 3:
+            self.task_manager.load_tasks_from_xlsx("resource/task3.xlsx")
+        else:
+            raise ValueError(f"不支持的任务ID: {task_id}")
+
+    def run(self, max_steps: int, load: bool = True, task_id: int = 1) -> None:
+        """运行调度模拟，从指定任务开始
+        
+        Args:
+            max_steps (int): 最大模拟步数
+            load (bool, optional): 是否从JSON文件加载地图和任务. Defaults to True.
+            task_id (int, optional): 要执行的任务ID. Defaults to 1.
+        """
         tasks_filename = os.path.join(self.output_dir, "tasks.json")
         map_filename = os.path.join(self.output_dir, "map.json")
 
@@ -134,7 +162,7 @@ class Scheduler:
             self.task_manager.load_tasks(tasks_filename)
         else:
             self.grid.load_map_from_excel("resource/map4.xlsx")
-            self.task_manager.load_tasks_from_xlsx("resource/task2.xlsx")
+            self.switch_task(task_id)
 
         self.initialize()
 
@@ -154,7 +182,8 @@ class Scheduler:
 
 
 if __name__ == "__main__":
-    scheduler = Scheduler(num_vehicles=1)
-    scheduler.run(max_steps=100000000, load=False)
+    scheduler = Scheduler(num_vehicles=2)
+    # 运行task2，会在normal类型的格子中填满货物
+    scheduler.run(max_steps=100000000, load=False, task_id=2)
     # scheduler.visualize("final_state.png")
 
