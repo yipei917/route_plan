@@ -3,7 +3,7 @@ from src.algorithms.a_star import AStarPlanner
 from src.models.vehicle import Vehicle, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, VEHICLE_STATUS_IDLE, VEHICLE_STATUS_WAITING, VEHICLE_STATUS_WORKING
 from src.models.constraints import ConstraintManager
 from src.utils.visualizer import GridVisualizer
-from src.models.task import TaskManager, TASK_TYPE_OUTBOUND, TASK_TYPE_INBOUND, TASK_STATUS_PENDING
+from src.models.task import TaskManager, TASK_TYPE_OUTBOUND, TASK_TYPE_INBOUND, TASK_STATUS_PENDING, TransportTask
 from typing import List
 
 class Test:
@@ -50,6 +50,16 @@ class Test:
         self.task_manager.add_task(task_type=TASK_TYPE_INBOUND, start_pos=(0,1), end_pos=(5,3))
         self.task_manager.add_task(task_type=TASK_TYPE_INBOUND, start_pos=(0,1), end_pos=(5,2))
 
+    def match(self, task: TransportTask, vehicle: Vehicle) -> bool:
+        """前3个任务只分配给V1，后3个只分配给V2"""
+        tasks = self.task_manager.tasks
+        idx = tasks.index(task)
+        if idx < 3 and vehicle == self.vehicles[0]:
+            return True
+        if idx >= 3 and vehicle == self.vehicles[1]:
+            return True
+        return False
+
     def assign_and_plan(self):
         """分配任务并规划路径"""
         pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
@@ -64,6 +74,8 @@ class Test:
 
         for task in pending_tasks:
             for vehicle in idle_vehicles:
+                if not self.match(task, vehicle):
+                    continue
                 path_to_start = self.path_planner.find_path(vehicle, vehicle.current_position, task.start_position)
                 if path_to_start is None: continue
                 if vehicle.assign_task(task):
