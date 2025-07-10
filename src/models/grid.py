@@ -9,7 +9,13 @@ DIRECTION_MAP = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)
 # 使用字符串常量替代枚举
 GRID_TYPE_NORMAL_CHANNEL = "normal_channel"
 GRID_TYPE_MAIN_CHANNEL = "main_channel"
+GRID_TYPE_UP_DOWN_CHANNEL = "up_down_channel"
 GRID_TYPE_OBSTACLE = "obstacle"
+GRID_TYPE_INTERFACE = "interface"
+
+MAIN_CHANNEL_STATUS_NULL = "null"
+MAIN_CHANNEL_STATUS_LEFT = "left"
+MAIN_CHANNEL_STATUS_RIGHT = "right"
 
 @dataclass
 class GridCell:
@@ -18,6 +24,7 @@ class GridCell:
     grid_type: str = GRID_TYPE_NORMAL_CHANNEL
     allowed_directions: List[str] = None
     has_cargo: bool = False
+    main_channel_status: str = MAIN_CHANNEL_STATUS_NULL
 
     def __post_init__(self):
         if self.allowed_directions is None:
@@ -38,6 +45,17 @@ class GridCell:
 
         return False
 
+    def get_allowed_directions(self, is_empty: bool) -> List[str]:
+        """获取格子允许的方向"""
+        if self.grid_type == GRID_TYPE_MAIN_CHANNEL:
+            if self.main_channel_status == MAIN_CHANNEL_STATUS_NULL:
+                return ["up", "down", "left", "right"]
+            elif self.main_channel_status == MAIN_CHANNEL_STATUS_LEFT:
+                return ["up", "down", "left"]
+            elif self.main_channel_status == MAIN_CHANNEL_STATUS_RIGHT:
+                return ["up", "down", "right"]
+        return self.allowed_directions
+
 class Grid:
     def __init__(self, width: int, height: int):
         self.width = width
@@ -46,7 +64,6 @@ class Grid:
         self.entrances: List[Tuple[int, int]] = []
         self.exits: List[Tuple[int, int]] = []
         self.main_channel_rows: List[int] = []
-        self.main_channel_columns: List[int] = []
 
         # 初始化网格
         for y in range(height):
@@ -128,48 +145,6 @@ class Grid:
         if (x, y) in self.cells:
             self.cells[(x, y)].has_cargo = has_cargo
 
-    def save_to_json(self, filename: str) -> None:
-        """将地图保存为 JSON 文件"""
-        map_data = {
-            "width": self.width,
-            "height": self.height,
-            "cells": [
-                {
-                    "x": x,
-                    "y": y,
-                    "grid_type": cell.grid_type,
-                    "allowed_directions": cell.allowed_directions,
-                    "has_cargo": cell.has_cargo,
-                }
-                for (x, y), cell in self.cells.items()
-            ],
-            "entrances": self.entrances,
-            "exits": self.exits,
-        }
-
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(map_data, f, indent=2)
-
-    def load_from_json(self, filename: str) -> None:
-        """从 JSON 文件加载地图"""
-        with open(filename, "r", encoding="utf-8") as f:
-            map_data = json.load(f)
-
-        # 初始化网格
-        self.width = map_data["width"]
-        self.height = map_data["height"]
-        self.cells.clear()
-        for cell_data in map_data["cells"]:
-            x, y = cell_data["x"], cell_data["y"]
-            grid_type = cell_data["grid_type"]
-            allowed_directions = cell_data["allowed_directions"]
-            has_cargo = cell_data["has_cargo"]
-            self.cells[(x, y)] = GridCell(x, y, grid_type, allowed_directions, has_cargo)
-
-        # 设置入口和出口
-        self.entrances = [tuple(pos) for pos in map_data["entrances"]]
-        self.exits = [tuple(pos) for pos in map_data["exits"]]
-
     def load_map_from_excel(self, path: str) -> None:
         df = pd.read_excel(path, header=None)
         df = df.iloc[1:, 1:]  # 跳过第一行和第一列
@@ -180,8 +155,6 @@ class Grid:
         self.cells.clear()
         self.entrances.clear()
         self.exits.clear()
-        self.main_channel_rows.clear()
-        self.main_channel_columns.clear()
 
         direction_map = {"上": "up", "下": "down", "左": "left", "右": "right"}
 
@@ -205,11 +178,13 @@ class Grid:
                 if "禁用" in cell_text:
                     grid_type = GRID_TYPE_OBSTACLE
                 elif "接驳口" in cell_text:
-                    grid_type = GRID_TYPE_MAIN_CHANNEL
+                    grid_type = GRID_TYPE_INTERFACE
                     self.add_entrance(x, y)
                     self.add_exit(x, y)
-                elif "道" in cell_text:
+                elif "通道" in cell_text:
                     grid_type = GRID_TYPE_MAIN_CHANNEL
+                elif "巷道" in cell_text:
+                    grid_type = GRID_TYPE_UP_DOWN_CHANNEL
                 elif "货" in cell_text:
                     grid_type = GRID_TYPE_NORMAL_CHANNEL
 
@@ -222,3 +197,7 @@ class Grid:
                     x=x, y=y, grid_type=grid_type, allowed_directions=allowed_directions
                 )
                 self.cells[(x, y)] = cell
+
+                # 统计主干道（main channel）所在的行，避免重复添加
+                if grid_type == GRID_TYPE_MAIN_CHANNEL and y not in self.main_channel_rows:
+                    self.main_channel_rows.append(y)

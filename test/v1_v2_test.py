@@ -86,7 +86,6 @@ class Test:
             if next_pos:
                 vehicle.current_path_index += 1
                 vehicle.update_position(next_pos)
-                
 
             task = vehicle.current_task
             if not task:

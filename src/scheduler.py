@@ -69,7 +69,7 @@ class Scheduler:
                     self.constraint_manager.add_path(vehicle, path_to_start)
                     print(f"任务 {task.id} 已分配给车辆 {vehicle.id}, 路径: {vehicle.get_path_str()}")
                     break
-            # else: print(f"任务 {task.id} 暂无可用车辆或所有车辆均无法到达")
+            else: print(f"任务 {task.id} 暂无可用车辆或所有车辆均无法到达")
         return
 
     def simulate_step(self) -> bool:
@@ -158,7 +158,6 @@ class Scheduler:
         map_filename = os.path.join(self.output_dir, "map.json")
 
         if load:
-            self.grid.load_from_json(map_filename)
             self.task_manager.load_tasks(tasks_filename)
         else:
             self.grid.load_map_from_excel("resource/map4.xlsx")
@@ -184,6 +183,6 @@ class Scheduler:
 if __name__ == "__main__":
     scheduler = Scheduler(num_vehicles=1)
     # 运行task2，会在normal类型的格子中填满货物
-    scheduler.run(max_steps=100000000, load=False, task_id=2)
+    scheduler.run(max_steps=100000000, load=False, task_id=1)
     # scheduler.visualize("final_state.png")
 
