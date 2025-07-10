@@ -34,12 +34,7 @@ class AStarPlanner:
         neighbors = self.grid.get_neighbors(position[0], position[1], vehicle.is_empty())
         return [n for n in neighbors if self.is_valid_position(n, vehicle)]
 
-    def find_path(
-        self,
-        vehicle: Vehicle,
-        start: Tuple[int, int],
-        goal: Tuple[int, int]
-    ) -> Optional[List[Tuple[int, int]]]:
+    def find_path(self, vehicle: Vehicle, start: Tuple[int, int], goal: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
         """A*算法寻找路径"""
         open_set: List[Tuple[float, int, Tuple[int, int]]] = []
         closed_set: Set[Tuple[int, int]] = set()
