@@ -3,7 +3,6 @@ from typing import List, Tuple, Dict
 from .grid import Grid, GRID_TYPE_OBSTACLE, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL
 from .vehicle import Vehicle
 
-
 class Constraint(ABC):
     """约束条件基类"""
 
@@ -11,79 +10,6 @@ class Constraint(ABC):
     def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
         """检查约束条件是否满足"""
         pass
-
-
-class PhysicalConstraint(Constraint):
-    """物理约束"""
-
-    def __init__(self, restricted_positions: List[Tuple[int, int]]):
-        self.restricted_positions = set(restricted_positions)
-
-    def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
-        """检查位置是否在物理限制区域内"""
-        return position not in self.restricted_positions
-
-
-class DirectionConstraint(Constraint):
-    """方向约束"""
-
-    def __init__(self, position: Tuple[int, int], allowed_directions: List[str]):
-        self.position = position
-        self.allowed_directions = allowed_directions
-
-    def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
-        """检查方向约束是否满足"""
-        if position != self.position:
-            return True
-
-        cell = grid.get_cell(*position)
-        if not cell:
-            return False
-
-        return all(direction in self.allowed_directions for direction in cell.allowed_directions)
-
-
-class CargoConstraint(Constraint):
-    """货物约束"""
-
-    def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
-        """检查货物约束是否满足"""
-        cell = grid.get_cell(*position)
-        if not cell:
-            return False
-
-        # 满车不能通过有货物的格子
-        if not vehicle.is_empty() and cell.has_cargo:
-            return False
-
-        return True
-
-
-class ChannelConstraint(Constraint):
-    """通道约束"""
-
-    def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
-        """检查通道约束是否满足"""
-        cell = grid.get_cell(*position)
-        if not cell:
-            return False
-
-        # 检查格子类型
-        if cell.grid_type == GRID_TYPE_OBSTACLE:
-            return False
-
-        if cell.grid_type == GRID_TYPE_MAIN_CHANNEL:
-            # 主通道允许所有车辆通过
-            return True
-
-        if cell.grid_type == GRID_TYPE_NORMAL_CHANNEL:
-            # 普通通道，空车可以穿行，满车不能通过有货物的格子
-            if vehicle.is_empty():
-                return True
-            return not cell.has_cargo
-
-        return False
-
 
 class VehicleConflictConstraint(Constraint):
     """车辆冲突约束"""

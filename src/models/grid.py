@@ -1,6 +1,5 @@
 from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
-import json
 import pandas as pd
 
 # 使用字典替代枚举
@@ -35,7 +34,7 @@ class GridCell:
         if self.grid_type == GRID_TYPE_OBSTACLE:
             return False
 
-        if self.grid_type == GRID_TYPE_MAIN_CHANNEL:
+        if self.grid_type == GRID_TYPE_MAIN_CHANNEL or self.grid_type == GRID_TYPE_INTERFACE:
             return True
 
         if self.grid_type == GRID_TYPE_NORMAL_CHANNEL:
@@ -61,8 +60,6 @@ class Grid:
         self.width = width
         self.height = height
         self.cells: Dict[Tuple[int, int], GridCell] = {}
-        self.entrances: List[Tuple[int, int]] = []
-        self.exits: List[Tuple[int, int]] = []
         self.main_channel_rows: List[int] = []
 
         # 初始化网格
@@ -85,16 +82,6 @@ class Grid:
         """设置格子允许的方向"""
         if (x, y) in self.cells:
             self.cells[(x, y)].allowed_directions = directions
-
-    def add_entrance(self, x: int, y: int) -> None:
-        """添加入口"""
-        if (x, y) not in self.entrances:
-            self.entrances.append((x, y))
-
-    def add_exit(self, x: int, y: int) -> None:
-        """添加出口"""
-        if (x, y) not in self.exits:
-            self.exits.append((x, y))
 
     def get_cell(self, x: int, y: int) -> Optional[GridCell]:
         """获取格子"""
@@ -127,14 +114,6 @@ class Grid:
         """检查位置是否有效"""
         return 0 <= x < self.width and 0 <= y < self.height
 
-    def get_all_entrances(self) -> List[Tuple[int, int]]:
-        """获取所有入口"""
-        return self.entrances.copy()
-
-    def get_all_exits(self) -> List[Tuple[int, int]]:
-        """获取所有出口"""
-        return self.exits.copy()
-
     def has_cargo(self, x: int, y: int) -> bool:
         """检查格子是否有货物"""
         cell = self.get_cell(x, y)
@@ -145,7 +124,7 @@ class Grid:
         if (x, y) in self.cells:
             self.cells[(x, y)].has_cargo = has_cargo
 
-    def load_map_from_excel(self, path: str) -> None:
+    def load_map_from_xlsx(self, path: str) -> None:
         df = pd.read_excel(path, header=None)
         df = df.iloc[1:, 1:]  # 跳过第一行和第一列
 
@@ -153,8 +132,6 @@ class Grid:
         self.width = cols
         self.height = rows
         self.cells.clear()
-        self.entrances.clear()
-        self.exits.clear()
 
         direction_map = {"上": "up", "下": "down", "左": "left", "右": "right"}
 
@@ -179,8 +156,6 @@ class Grid:
                     grid_type = GRID_TYPE_OBSTACLE
                 elif "接驳口" in cell_text:
                     grid_type = GRID_TYPE_INTERFACE
-                    self.add_entrance(x, y)
-                    self.add_exit(x, y)
                 elif "通道" in cell_text:
                     grid_type = GRID_TYPE_MAIN_CHANNEL
                 elif "巷道" in cell_text:
@@ -193,9 +168,7 @@ class Grid:
                     if zh_dir in cell_text:
                         allowed_directions.append(en_dir)
 
-                cell = GridCell(
-                    x=x, y=y, grid_type=grid_type, allowed_directions=allowed_directions
-                )
+                cell = GridCell(x=x, y=y, grid_type=grid_type, allowed_directions=allowed_directions)
                 self.cells[(x, y)] = cell
 
                 # 统计主干道（main channel）所在的行，避免重复添加

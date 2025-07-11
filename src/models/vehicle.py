@@ -9,10 +9,8 @@ VEHICLE_TYPE_LOADED = "loaded"
 
 VEHICLE_STATUS_IDLE = "idle"
 VEHICLE_STATUS_MOVING = "moving"
-VEHICLE_STATUS_LOADING = "loading"
-VEHICLE_STATUS_UNLOADING = "unloading"
+VEHICLE_STATUS_AVOIDING = "avoiding"
 VEHICLE_STATUS_WAITING = "waiting"
-VEHICLE_STATUS_WORKING = "working"
 
 @dataclass
 class Vehicle:
@@ -95,7 +93,7 @@ class Vehicle:
             # 更新任务状态
             self.current_task.start_execution()
             # 更新车辆状态
-            self.status = VEHICLE_STATUS_WORKING
+            self.status = VEHICLE_STATUS_WAITING
             print(f"任务启动完成")
             print(f"车辆状态: {self.status}")
             print(f"任务状态: {self.current_task.status}")
