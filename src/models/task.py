@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Tuple, Optional
 from datetime import datetime
 import json
@@ -12,7 +12,6 @@ TASK_STATUS_PENDING = "pending"
 TASK_STATUS_ASSIGNED = "assigned"
 TASK_STATUS_IN_PROGRESS = "in_progress"
 TASK_STATUS_COMPLETED = "completed"
-TASK_STATUS_FAILED = "failed"
 
 
 @dataclass
@@ -23,14 +22,9 @@ class TransportTask:
     start_position: Tuple[int, int]  # Start position (x, y)
     end_position: Tuple[int, int]  # End position (x, y)
     priority: int = 0  # Task priority (higher number = higher priority)
-    created_at: datetime = None  # Task creation time
+    created_at: datetime = field(default_factory=datetime.now)  # Task creation time
     assigned_vehicle: Optional[str] = None  # ID of the vehicle assigned to this task
     status: str = TASK_STATUS_PENDING  # Current task status
-    error_message: Optional[str] = None  # 添加错误信息字段
-
-    def __post_init__(self):
-        if self.created_at is None:
-            self.created_at = datetime.now()
 
     def assign_to_vehicle(self, vehicle_id: str) -> None:
         """Assign task to a vehicle"""
@@ -44,17 +38,6 @@ class TransportTask:
     def complete(self) -> None:
         """Mark task as completed"""
         self.status = TASK_STATUS_COMPLETED
-
-    def fail(self, error_message: str = None) -> None:
-        """任务失败"""
-        self.status = TASK_STATUS_FAILED
-        self.error_message = error_message
-        if self.assigned_vehicle:
-            self.assigned_vehicle = None
-
-    def reset_error(self) -> None:
-        """重置错误状态"""
-        self.error_message = None
 
 
 class TaskManager:
@@ -142,43 +125,8 @@ class TaskManager:
             "pending": len(self.get_tasks_by_status(TASK_STATUS_PENDING)),
             "assigned": len(self.get_tasks_by_status(TASK_STATUS_ASSIGNED)),
             "in_progress": len(self.get_tasks_by_status(TASK_STATUS_IN_PROGRESS)),
-            "completed": len(self.get_tasks_by_status(TASK_STATUS_COMPLETED)),
-            "failed": len(self.get_tasks_by_status(TASK_STATUS_FAILED))
+            "completed": len(self.get_tasks_by_status(TASK_STATUS_COMPLETED))
         }
-
-    def save_tasks(self, filename: str) -> None:
-        """Save tasks to a file"""
-        tasks_data = [
-            {
-                "id": task.id,
-                "task_type": task.task_type,
-                "start_position": task.start_position,
-                "end_position": task.end_position,
-                "priority": task.priority,
-                "created_at": task.created_at.isoformat(),
-                "status": task.status
-            }
-            for task in self.tasks
-        ]
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(tasks_data, f, indent=2, ensure_ascii=False)
-
-    def load_tasks(self, filename: str) -> None:
-        """Load tasks from a file"""
-        with open(filename, "r", encoding="utf-8") as f:
-            tasks_data = json.load(f)
-        for task_data in tasks_data:
-            self.tasks.append(
-                TransportTask(
-                    id=task_data["id"],
-                    task_type=task_data["task_type"],
-                    start_position=tuple(task_data["start_position"]),
-                    end_position=tuple(task_data["end_position"]),
-                    priority=task_data["priority"],
-                    created_at=datetime.fromisoformat(task_data["created_at"]),
-                    status=task_data["status"]
-                )
-            )
     
     def load_tasks_from_xlsx(self, filename: str) -> None:
         """从Excel文件加载任务"""

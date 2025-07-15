@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 import matplotlib.patches as patches
 from typing import List, Tuple
 from src.models.grid import Grid, GRID_TYPE_NORMAL_CHANNEL, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE, GRID_TYPE_INTERFACE, GRID_TYPE_UP_DOWN_CHANNEL
@@ -98,11 +97,11 @@ class GridVisualizer:
             self.ax.text(rx, ry, v.id, ha='center', va='center', color='white', fontsize=18, fontweight='bold', zorder=11)
             
             # 绘制车辆路径
-            if v.path and len(v.path) > 0:
+            if v.current_execution_path and len(v.current_execution_path) > 0:
                 path_color = path_colors[i % len(path_colors)]
                 
                 # 为路径中的每个格子绘制填充矩形
-                for px, py in v.path:
+                for px, py in v.current_execution_path:
                     ry = self.grid.height - 1 - py
                     path_rect = patches.Rectangle(
                         (px - 0.5, ry - 0.5), 1, 1,

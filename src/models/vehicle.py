@@ -19,7 +19,8 @@ class Vehicle:
     vehicle_type: str
     current_position: Tuple[int, int]
     status: str = VEHICLE_STATUS_IDLE
-    path: List[Tuple[int, int]] = field(default_factory=list)
+    full_planned_path: List[Tuple[int, int]] = field(default_factory=list)  # 完整规划路径
+    current_execution_path: List[Tuple[int, int]] = field(default_factory=list)  # 当前执行路径
     current_task: Optional[TransportTask] = None
     task_history: List[TransportTask] = field(default_factory=list)
     last_update_time = datetime.now()
@@ -75,8 +76,8 @@ class Vehicle:
             print(f"错误：任务状态不是已分配状态，当前状态: {self.current_task.status}")
             return
         
-        if not self.path:
-            print(f"错误：没有设置路径")
+        if not self.full_planned_path:
+            print(f"错误：没有设置完整规划路径")
             return
         
         print(f"开始执行任务")
@@ -114,7 +115,8 @@ class Vehicle:
             # 清除当前任务相关状态
             self.current_task = None
             self.status = VEHICLE_STATUS_IDLE
-            self.path = []
+            self.full_planned_path = []
+            self.current_execution_path = []
             print(f"清除任务相关状态")
             
             # 更新最后更新时间
@@ -134,50 +136,60 @@ class Vehicle:
         self.last_update_time = datetime.now()
         print(f"位置已更新")
 
-    def set_path(self, path: List[Tuple[int, int]]) -> None:
-        """设置路径"""
-        print(f"\n=== 设置路径 ===")
+    def set_full_planned_path(self, path: List[Tuple[int, int]]) -> None:
+        """设置完整规划路径"""
+        print(f"\n=== 设置完整规划路径 ===")
         print(f"车辆 {self.id} 当前状态: {self.status}")
-        print(f"当前路径长度: {len(self.path) if self.path else 0}")
-        print(f"新路径长度: {len(path) if path else 0}")
+        print(f"当前完整路径长度: {len(self.full_planned_path)}")
+        print(f"新完整路径长度: {len(path) if path else 0}")
         
         if not path:
-            print(f"路径为空，清除路径")
-            self.path = []
+            print(f"路径为空，清除完整规划路径")
+            self.full_planned_path = []
+            return
+
+        self.full_planned_path = path
+        print(f"完整规划路径已设置")
+        print(f"完整路径: {' -> '.join(str(p) for p in path)}")
+
+    def set_current_execution_path(self, path: List[Tuple[int, int]]) -> None:
+        """设置当前执行路径"""
+        print(f"\n=== 设置当前执行路径 ===")
+        print(f"车辆 {self.id} 当前状态: {self.status}")
+        print(f"当前执行路径长度: {len(self.current_execution_path)}")
+        print(f"新执行路径长度: {len(path) if path else 0}")
+        
+        if not path:
+            print(f"路径为空，清除当前执行路径")
+            self.current_execution_path = []
             self.current_path_index = 0
             return
 
-        self.path = path
+        self.current_execution_path = path
         self.current_path_index = 0
-        print(f"路径已设置")
+        print(f"当前执行路径已设置")
         print(f"目标位置: {path[-1]}")
-        print(f"完整路径: {' -> '.join(str(p) for p in path)}")
-
-    def set_waiting(self) -> None:
-        """设置等待状态"""
-        self.path = []
-        self.current_path_index = 0
-        self.status = VEHICLE_STATUS_WAITING
+        print(f"执行路径: {' -> '.join(str(p) for p in path)}")
 
     def get_next_position(self) -> Optional[Tuple[int, int]]:
         """获取下一个位置"""
-        if self.current_path_index + 1 >= len(self.path):
+        if self.current_path_index + 1 >= len(self.current_execution_path):
             return None
         else:
-            return self.path[self.current_path_index + 1] if self.path else None
+            return self.current_execution_path[self.current_path_index + 1] if self.current_execution_path else None
 
     def is_empty(self) -> bool:
         """检查车辆是否为空"""
         return self.vehicle_type == VEHICLE_TYPE_EMPTY
 
-    def get_path_str(self) -> str:
-        """返回当前路径的字符串表示"""
-        if not self.path:
+    def get_full_path_str(self) -> str:
+        """返回完整规划路径的字符串表示"""
+        if not self.full_planned_path:
             return ""
-        return " -> ".join(f"({x},{y})" for x, y in self.path)
+        return " -> ".join(f"({x},{y})" for x, y in self.full_planned_path)
 
     def get_remaining_path(self) -> List[Tuple[int, int]]:
-        """获取车辆的剩余路径"""
-        if not self.path or self.current_path_index >= len(self.path):
+        """获取车辆的剩余执行路径"""
+        if not self.current_execution_path or self.current_path_index >= len(self.current_execution_path):
             return []
-        return self.path[self.current_path_index:]
+        return self.current_execution_path[self.current_path_index:]
