@@ -2,6 +2,7 @@ from typing import List
 from src.models.grid import GRID_TYPE_MAIN_CHANNEL, Grid
 from src.models.task import TASK_STATUS_PENDING, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TaskManager 
 from src.models.vehicle import VEHICLE_STATUS_IDLE, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, Vehicle
+from src.models.constraints import ConstraintManager
 from src.utils.visualizer import GridVisualizer
 from src.utils.simulator import Simulator
 from src.algorithms.a_star import AStarPlanner
@@ -18,6 +19,7 @@ class Scheduler:
         self.num_vehicles = num_vehicles
         self.grid_visualizer = GridVisualizer(self.grid, figsize=(40,40))
         self.simulator = Simulator()
+        self.constraint_manager = ConstraintManager()
 
     def initialize(self) -> None:
         """初始化地图、车辆、模拟器和约束"""

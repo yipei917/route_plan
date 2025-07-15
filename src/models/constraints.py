@@ -1,107 +1,47 @@
-from abc import ABC, abstractmethod
 from typing import List, Tuple, Dict
-from .grid import Grid, GRID_TYPE_OBSTACLE, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL
 from .vehicle import Vehicle
 
-class Constraint(ABC):
-    """约束条件基类"""
-
-    @abstractmethod
-    def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
-        """检查约束条件是否满足"""
-        pass
-
-class VehicleConflictConstraint(Constraint):
-    """车辆冲突约束"""
-
-    def __init__(self):
-        self.vehicles: Dict[str, Vehicle] = {}  # 车辆ID到车辆对象的映射
-        self.occupied_positions: Dict[Tuple[int, int], str] = {}  # 位置到车辆ID的映射
-        self.active_paths: Dict[str, List[Tuple[int, int]]] = {}  # 车辆ID到活动路径的映射
-
-    def add_vehicle(self, vehicle: Vehicle) -> None:
-        """添加车辆到约束系统"""
-        self.vehicles[vehicle.id] = vehicle
-        self._update_occupied_positions()
-
-    def remove_vehicle(self, vehicle_id: str) -> None:
-        """从约束系统中移除车辆"""
-        if vehicle_id in self.vehicles:
-            del self.vehicles[vehicle_id]
-            self._update_occupied_positions()
-
-    def _update_occupied_positions(self) -> None:
-        """更新被占用的位置：将所有车辆的整条路径都视为占用"""
-        self.occupied_positions.clear()
-        for vehicle in self.vehicles.values():
-            if vehicle.path:
-                for pos in vehicle.path:
-                    self.occupied_positions[pos] = vehicle.id
-            else:
-                # 如果没有路径，只占当前位置
-                self.occupied_positions[vehicle.current_position] = vehicle.id
-
-    def check(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
-        """检查位置是否会发生冲突"""
-        return position not in self.occupied_positions
-
-    def add_path(self, vehicle: Vehicle, path: List[Tuple[int, int]]) -> None:
-        """为指定车辆添加路径"""
-        if vehicle.id in self.vehicles.keys():
-            self.active_paths[vehicle.id] = path
-        else:
-            print(f"车辆 {vehicle.id} 不在约束系统中，无法添加路径")
-        self._update_occupied_positions()
-
-    def remove_path(self, vehicle: Vehicle) -> None:
-        """从约束系统中移除指定车辆的路径"""
-        if vehicle.id in self.active_paths:
-            del self.active_paths[vehicle.id]
-        else:
-            print(f"车辆 {vehicle.id} 没有活动路径，无法移除路径")
-        self._update_occupied_positions()
-
 class ConstraintManager:
-    """约束管理器"""
+    """约束管理器 - 管理车辆路径冲突检测和坐标锁定"""
 
     def __init__(self):
-        self.constraints: List[Constraint] = []
-        self.vehicle_conflict_constraint = VehicleConflictConstraint()
-        self.add_constraint(self.vehicle_conflict_constraint)
-        self.vehicles = []
+        self.position_locks: Dict[Tuple[int, int], str] = {}
 
-    def add_constraint(self, constraint: Constraint) -> None:
-        """添加约束"""
-        self.constraints.append(constraint)
+    def add_path_constraint(self, vehicle: Vehicle, path: List[Tuple[int, int]]) -> None:
+        """添加限制路径，锁定路径中的每个坐标"""
 
-    def remove_constraint(self, constraint: Constraint) -> None:
-        """移除约束"""
-        if constraint in self.constraints:
-            self.constraints.remove(constraint)
+        print(f"\n=== 为车辆 {vehicle.id} 添加路径约束 ===")
+        print(f"路径: {' -> '.join(str(p) for p in path)}")
+        
+        # 如果车辆已有锁定的坐标，先清除
+        if vehicle.id in self.position_locks:
+            self.remove_path_constraint(vehicle)
+        
+        # 锁定新路径中的所有坐标
+        for position in path:
+            self.position_locks[position] = vehicle.id
 
-    def check_all_constraints(self, grid: Grid, vehicle: Vehicle, position: Tuple[int, int]) -> bool:
-        """检查所有约束条件，包括车辆冲突约束"""
-        # 先检查所有通用约束
-        basic_ok = all(constraint.check(grid, vehicle, position) for constraint in self.constraints)
-        # 再单独检查车辆冲突约束（可选，防止被遗漏或被移除）
-        vehicle_ok = self.vehicle_conflict_constraint.check(grid, vehicle, position)
-        return basic_ok and vehicle_ok
+    def remove_path_constraint(self, vehicle: Vehicle) -> None:
+        """删除车辆的所有约束信息"""
+        
+        # 获取车辆锁定的所有坐标
+        locked_positions = [pos for pos, vid in self.position_locks.items() if vid == vehicle.id]
+        
+        # 从位置锁定表中删除这些坐标
+        for position in locked_positions:
+            del self.position_locks[position]
 
-    def add_vehicle(self, vehicle: Vehicle) -> None:
-        """添加车辆到约束系统"""
-        self.vehicle_conflict_constraint.add_vehicle(vehicle)
-        if vehicle not in self.vehicles:
-            self.vehicles.append(vehicle)
+    def check_path_conflicts(self, path: List[Tuple[int, int]]) -> List[str]:
+        """检测路径冲突"""
 
-    def remove_vehicle(self, vehicle_id: str) -> None:
-        """从约束系统中移除车辆"""
-        self.vehicle_conflict_constraint.remove_vehicle(vehicle_id)
-        self.vehicles = [v for v in self.vehicles if v.id != vehicle_id]
-   
-    def add_path(self, vehicle: Vehicle, path: List[Tuple[int, int]]) -> None:
-        """为指定车辆添加路径"""
-        self.vehicle_conflict_constraint.add_path(vehicle, path)
+        # 检查路径中是否有冲突
+        conflicting_vehicles = []
+        for position in path:
+            if position in self.position_locks:
+                conflicting_vehicles.append(self.position_locks[position])
+        
+        return conflicting_vehicles
 
-    def remove_path(self, vehicle: Vehicle) -> None:
-        """从约束系统中移除指定车辆的路径"""
-        self.vehicle_conflict_constraint.remove_path(vehicle)
+
+    
+
