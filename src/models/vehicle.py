@@ -1,7 +1,7 @@
 from typing import Optional, Tuple, List
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from .task import TransportTask
+from .task import TASK_STATUS_ASSIGNED, TransportTask
 
 # 使用字符串常量替代枚举
 VEHICLE_TYPE_EMPTY = "empty"
@@ -18,19 +18,12 @@ class Vehicle:
     id: str
     vehicle_type: str
     current_position: Tuple[int, int]
-    target_position: Optional[Tuple[int, int]] = None
     status: str = VEHICLE_STATUS_IDLE
-    path: List[Tuple[int, int]] = None
+    path: List[Tuple[int, int]] = field(default_factory=list)
     current_task: Optional[TransportTask] = None
-    task_history: List[TransportTask] = None
+    task_history: List[TransportTask] = field(default_factory=list)
     last_update_time = datetime.now()
     current_path_index = 0
-
-    def __post_init__(self):
-        if self.path is None:
-            self.path = []
-        if self.task_history is None:
-            self.task_history = []
 
     def assign_task(self, task: TransportTask) -> bool:
         """Assign a task to the vehicle"""
@@ -53,7 +46,6 @@ class Vehicle:
             task.assign_to_vehicle(self.id)
             # 更新车辆状态
             self.current_task = task
-            self.target_position = task.end_position
             print(f"任务分配完成")
             print(f"车辆状态: {self.status}")
             print(f"任务状态: {task.status}")
@@ -62,7 +54,6 @@ class Vehicle:
             print(f"分配任务时发生错误: {str(e)}")
             # 发生错误时恢复状态
             self.current_task = None
-            self.target_position = None
             return False
 
     def start_task(self) -> None:
@@ -80,7 +71,7 @@ class Vehicle:
             print(f"错误：车辆状态不是空闲状态，当前状态: {self.status}")
             return
         
-        if self.current_task.status != "assigned":
+        if self.current_task.status != TASK_STATUS_ASSIGNED:
             print(f"错误：任务状态不是已分配状态，当前状态: {self.current_task.status}")
             return
         
@@ -93,7 +84,7 @@ class Vehicle:
             # 更新任务状态
             self.current_task.start_execution()
             # 更新车辆状态
-            self.status = VEHICLE_STATUS_WAITING
+            self.status = VEHICLE_STATUS_MOVING
             print(f"任务启动完成")
             print(f"车辆状态: {self.status}")
             print(f"任务状态: {self.current_task.status}")
@@ -102,7 +93,7 @@ class Vehicle:
             # 发生错误时恢复状态
             self.status = VEHICLE_STATUS_IDLE
             if self.current_task:
-                self.current_task.status = "assigned"
+                self.current_task.status = TASK_STATUS_ASSIGNED
 
     def complete_task(self) -> None:
         """Complete the current task"""
@@ -123,7 +114,6 @@ class Vehicle:
             # 清除当前任务相关状态
             self.current_task = None
             self.status = VEHICLE_STATUS_IDLE
-            self.target_position = None
             self.path = []
             print(f"清除任务相关状态")
             
@@ -154,15 +144,13 @@ class Vehicle:
         if not path:
             print(f"路径为空，清除路径")
             self.path = []
-            self.target_position = None
             self.current_path_index = 0
             return
 
         self.path = path
-        self.target_position = path[-1]
         self.current_path_index = 0
         print(f"路径已设置")
-        print(f"目标位置: {self.target_position}")
+        print(f"目标位置: {path[-1]}")
         print(f"完整路径: {' -> '.join(str(p) for p in path)}")
 
     def set_waiting(self) -> None:
