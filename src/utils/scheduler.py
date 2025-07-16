@@ -1,5 +1,5 @@
-from typing import List
-from src.models.grid import GRID_TYPE_MAIN_CHANNEL, Grid
+from typing import List, Tuple
+from src.models.grid import GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL, Grid
 from src.models.task import TASK_STATUS_PENDING, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TaskManager 
 from src.models.vehicle import VEHICLE_STATUS_IDLE, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, Vehicle
 from src.models.constraints import ConstraintManager
@@ -11,7 +11,7 @@ import os
 class Scheduler:
     """调度器类，管理任务分配和路径规划"""
 
-    def __init__(self, num_vehicles: int):
+    def __init__(self, num_vehicles: int, step_size: int):
         self.grid = Grid(10, 10)
         self.task_manager = TaskManager()
         self.path_planner = AStarPlanner(self.grid)
@@ -20,6 +20,7 @@ class Scheduler:
         self.grid_visualizer = GridVisualizer(self.grid, figsize=(40,40))
         self.simulator = Simulator()
         self.constraint_manager = ConstraintManager()
+        self.step_size = step_size
 
     def initialize(self) -> None:
         """初始化地图、车辆、模拟器和约束"""
@@ -113,10 +114,103 @@ class Scheduler:
                     # 结束任务
                     vehicle.complete_task()
 
+    def analyze_path_segments(self, path: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+        """分析路径，将其分为主干道段和一般道路段"""
+        if not path:
+            return []
+        
+        num_main_channel = 0
+        
+        # 统计开头有多少个main
+        for position in path:
+            cell = self.grid.get_cell(position[0], position[1])
+            if cell is None:
+                break
+            if cell.grid_type == GRID_TYPE_MAIN_CHANNEL:
+                num_main_channel += 1
+            else:
+                break
+            
+        # 如果开头有多个main，则返回前step_size个main
+        if num_main_channel > 1:
+            return path[:min(num_main_channel, self.step_size)]
+        else:
+            main_start_idx = 0  # 已知开头是main
+            next_main_idx = None
+            for idx, position in enumerate(path[1:], start=1):
+                cell = self.grid.get_cell(position[0], position[1])
+                if cell is None:
+                    break
+                if cell.grid_type == GRID_TYPE_MAIN_CHANNEL:
+                    next_main_idx = idx
+                    break
+            if next_main_idx is not None:
+                # 存在后续main，返回从开头main到下一个main（包含），以及中间的normal
+                return path[main_start_idx:next_main_idx+1]
+            else:
+                # 没有后续main，找到最后一个normal
+                forward_path = path
+                return_path = list(reversed(forward_path[:-1]))  # 不重复最后一个点
+                return forward_path + return_path
+
+
     def assign_path(self, vehicle: Vehicle):
-        # todo 路径分配策略
-        vehicle.set_current_execution_path(vehicle.full_planned_path)
-        return
+        """路径分配策略：主干道按step锁定，一般道路全部锁定"""
+        print(f"\n=== 为车辆 {vehicle.id} 分配路径约束 ===")
+        
+        full_path = vehicle.full_planned_path
+        if not full_path:
+            print(f"车辆 {vehicle.id} 没有规划路径")
+            return
+        
+        # 1. 分析路径段
+        path_segments = self.analyze_path_segments(full_path)
+        print(f"路径分析结果:")
+        for i, (segment_type, positions) in enumerate(path_segments):
+            print(f"  段{i+1}: {segment_type}, 长度={len(positions)}")
+        
+        # 2. 确保车辆当前位置在主干道上
+        start_position = full_path[0]
+        start_cell = self.grid.get_cell(start_position[0], start_position[1])
+        if start_cell and start_cell.grid_type != GRID_TYPE_MAIN_CHANNEL:
+            print(f"⚠️ 警告：车辆 {vehicle.id} 起始位置 {start_position} 不在主干道上")
+        
+        # 3. 根据路径段类型分配约束
+        positions_to_lock = []
+        
+        for segment_type, positions in path_segments:
+            if segment_type == 'main_channel':
+                # 主干道：只锁定前step_size个坐标
+                lock_count = min(self.step_size, len(positions))
+                positions_to_lock.extend(positions[:lock_count])
+                print(f"  主干道段：锁定前 {lock_count}/{len(positions)} 个坐标")
+            else:
+                # 一般道路：锁定全部坐标
+                positions_to_lock.extend(positions)
+                print(f"  一般道路段：锁定全部 {len(positions)} 个坐标")
+        
+        # 4. 检查冲突
+        conflicts = self.constraint_manager.check_path_conflicts(positions_to_lock)
+        if conflicts:
+            print(f"⚠️ 路径冲突，与车辆 {set(conflicts)} 冲突")
+            print("需要重新规划路径或等待")
+            # 暂时设置执行路径但不锁定约束
+            vehicle.set_current_execution_path(full_path)
+            return False
+        
+        # 5. 添加路径约束
+        self.constraint_manager.add_path_constraint(vehicle, positions_to_lock)
+        
+        # 6. 设置执行路径
+        vehicle.set_current_execution_path(full_path)
+        
+        print(f"✅ 成功为车辆 {vehicle.id} 分配路径，锁定了 {len(positions_to_lock)} 个坐标")
+        return True
+
+    def release_vehicle_constraints(self, vehicle: Vehicle):
+        """释放车辆的路径约束"""
+        print(f"\n=== 释放车辆 {vehicle.id} 的路径约束 ===")
+        self.constraint_manager.remove_path_constraint(vehicle)
 
     def run(self):
         self.visualize("test_0.png")
