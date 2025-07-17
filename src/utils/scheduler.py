@@ -1,5 +1,5 @@
 from typing import List, Tuple
-from src.models.grid import GRID_TYPE_INTERFACE, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL, Grid
+from src.models.grid import GRID_TYPE_INTERFACE, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL, GRID_TYPE_UP_DOWN_CHANNEL, Grid
 from src.models.task import TASK_STATUS_PENDING, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TaskManager 
 from src.models.vehicle import (VEHICLE_STATUS_IDLE, VEHICLE_STATUS_PICKUP, VEHICLE_STATUS_DELIVER, 
     VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, Vehicle)
@@ -52,7 +52,6 @@ class Scheduler:
         pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
         idle_vehicles = [v for v in self.vehicles if v.status == VEHICLE_STATUS_IDLE]
 
-        # todo 确保车辆在主通道上
         if not pending_tasks or not idle_vehicles:
             return
 
@@ -76,6 +75,7 @@ class Scheduler:
             task = vehicle.current_task
             if task is None: continue
 
+            # 检查车辆是否在起点或终点
             if vehicle.current_position == task.start_position and vehicle.is_empty():
                 vehicle.vehicle_type = VEHICLE_TYPE_LOADED
                 if task.task_type == TASK_TYPE_OUTBOUND:
@@ -85,6 +85,8 @@ class Scheduler:
                 vehicle.vehicle_type = VEHICLE_TYPE_EMPTY
                 if task.task_type == TASK_TYPE_INBOUND:
                     self.grid.set_cargo(task.end_position[0], task.end_position[1], True)
+                # 释放方向锁定
+                self.constraint_manager.remove_direction_constraint(vehicle, self.grid)
                 vehicle.status = VEHICLE_STATUS_IDLE
                 vehicle.complete_task()
 
@@ -97,12 +99,17 @@ class Scheduler:
                 path = self.path_planner.find_path(vehicle, vehicle.current_position, task.start_position)
                 if path is None: continue
                 vehicle.set_full_planned_path(path)
+                self.assign_path(vehicle)
             elif vehicle.status == VEHICLE_STATUS_DELIVER:
                 path = self.path_planner.find_path(vehicle, vehicle.current_position, task.end_position)
                 if path is None: continue
                 vehicle.set_full_planned_path(path)
+                self.constraint_manager.add_direction_constraint(vehicle, self.grid)
+                self.assign_path(vehicle)
+            elif vehicle.status == VEHICLE_STATUS_IDLE:
+                # todo 闲置车辆处理
+                self.constraint_manager.remove_path_constraint(vehicle)
             
-            self.assign_path(vehicle)
 
     def analyze_path_segments(self, path: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
         """分析路径，将其分为主干道段和一般道路段"""
@@ -111,38 +118,37 @@ class Scheduler:
         
         num_main_channel = 0
         
-        # 统计开头有多少个main
+        # 统计开头有多少个主通道
         for position in path:
             cell = self.grid.get_cell(position[0], position[1])
             if cell is None:
                 break
-            if cell.grid_type == GRID_TYPE_MAIN_CHANNEL or cell.grid_type == GRID_TYPE_INTERFACE:
+            if cell.grid_type == GRID_TYPE_MAIN_CHANNEL or cell.grid_type == GRID_TYPE_INTERFACE or cell.grid_type == GRID_TYPE_UP_DOWN_CHANNEL:
                 num_main_channel += 1
             else:
                 break
             
-        # 如果开头有多个main，则返回前step_size个main
+        # 如果开头有多个主通道，则返回前step_size个主通道
         if num_main_channel > 1:
             return path[:min(num_main_channel, self.step_size)]
+        # 进入子通道
         else:
-            main_start_idx = 0  # 已知开头是main
             next_main_idx = None
             for idx, position in enumerate(path[1:], start=1):
                 cell = self.grid.get_cell(position[0], position[1])
                 if cell is None:
                     break
-                if cell.grid_type == GRID_TYPE_MAIN_CHANNEL or cell.grid_type == GRID_TYPE_INTERFACE:
+                if cell.grid_type == GRID_TYPE_MAIN_CHANNEL or cell.grid_type == GRID_TYPE_INTERFACE or cell.grid_type == GRID_TYPE_UP_DOWN_CHANNEL:
                     next_main_idx = idx
                     break
             if next_main_idx is not None:
-                # 存在后续main，返回从开头main到下一个main（包含），以及中间的normal
-                return path[main_start_idx:next_main_idx+1]
+                # 存在后续主通道，返回从开头主通道到下一个主通道，以及中间的子通道
+                return path[0:next_main_idx+1]
             else:
-                # 没有后续main，找到最后一个normal
+                # 没有后续主通道，进去子通道再返回
                 forward_path = path
                 return_path = list(reversed(forward_path[:-1]))  # 不重复最后一个点
                 return forward_path + return_path
-
 
     def assign_path(self, vehicle: Vehicle):
         """路径分配策略：主干道按step锁定，一般道路全部锁定"""
@@ -158,7 +164,7 @@ class Scheduler:
         # 检查冲突
         conflicts = self.constraint_manager.check_path_conflicts(path_segments, vehicle)
         if conflicts:
-            # todo 避让算法
+            # todo 避让算法，等待算法
             print(f"路径冲突，与车辆 {set(conflicts)} 冲突")
             print("需要重新规划路径或等待")
             return
@@ -168,10 +174,6 @@ class Scheduler:
         
         # 设置执行路径
         vehicle.set_current_execution_path(path_segments)
-
-    def release_vehicle_constraints(self, vehicle: Vehicle):
-        """释放车辆的路径约束"""
-        self.constraint_manager.remove_path_constraint(vehicle)
 
     def run(self):
         self.visualize("test_0.png")

@@ -34,7 +34,7 @@ class GridCell:
         if self.grid_type == GRID_TYPE_OBSTACLE:
             return False
 
-        if self.grid_type == GRID_TYPE_MAIN_CHANNEL or self.grid_type == GRID_TYPE_INTERFACE:
+        if self.grid_type == GRID_TYPE_MAIN_CHANNEL or self.grid_type == GRID_TYPE_INTERFACE or self.grid_type == GRID_TYPE_UP_DOWN_CHANNEL:
             return True
 
         if self.grid_type == GRID_TYPE_NORMAL_CHANNEL:
@@ -44,7 +44,7 @@ class GridCell:
 
         return False
 
-    def get_allowed_directions(self, is_empty: bool) -> List[str]:
+    def get_allowed_directions(self) -> List[str]:
         """获取格子允许的方向"""
         if self.grid_type == GRID_TYPE_MAIN_CHANNEL:
             if self.main_channel_status == MAIN_CHANNEL_STATUS_NULL:
@@ -94,7 +94,7 @@ class Grid:
         if not current_cell:
             return neighbors
 
-        for direction in current_cell.allowed_directions:
+        for direction in current_cell.get_allowed_directions():
             dx, dy = DIRECTION_MAP[direction]
             new_x = x + dx
             new_y = y + dy

@@ -67,8 +67,8 @@ class GridVisualizer:
                 self.ax.text(rx, ry, f"{x},{y}", ha='center', va='center', color='black', fontsize=28, alpha=0.5)
 
                 # 绘制方向箭头（放在编号下方）
-                if cell and cell.allowed_directions:
-                    directions_text = "".join(self.direction_arrows[d] for d in cell.allowed_directions)
+                if cell and cell.get_allowed_directions():
+                    directions_text = "".join(self.direction_arrows[d] for d in cell.get_allowed_directions())
                     self.ax.text(rx, ry - 0.2, directions_text, ha='center', va='center', fontsize=16)
 
                 # 货物

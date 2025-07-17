@@ -181,8 +181,5 @@ class Vehicle:
         """检查车辆是否为空"""
         return self.vehicle_type == VEHICLE_TYPE_EMPTY
 
-    def get_remaining_path(self) -> List[Tuple[int, int]]:
-        """获取车辆的剩余执行路径"""
-        if not self.current_execution_path or self.current_path_index >= len(self.current_execution_path):
-            return []
-        return self.current_execution_path[self.current_path_index:]
+    def get_full_planned_path(self) -> List[Tuple[int, int]]:
+        return self.full_planned_path
