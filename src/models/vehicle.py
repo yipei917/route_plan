@@ -8,9 +8,10 @@ VEHICLE_TYPE_EMPTY = "empty"
 VEHICLE_TYPE_LOADED = "loaded"
 
 VEHICLE_STATUS_IDLE = "idle"
-VEHICLE_STATUS_MOVING = "moving"
+VEHICLE_STATUS_PICKUP = "pickup"
 VEHICLE_STATUS_AVOIDING = "avoiding"
 VEHICLE_STATUS_WAITING = "waiting"
+VEHICLE_STATUS_DELIVER = "deliver"
 
 @dataclass
 class Vehicle:
@@ -85,7 +86,7 @@ class Vehicle:
             # 更新任务状态
             self.current_task.start_execution()
             # 更新车辆状态
-            self.status = VEHICLE_STATUS_MOVING
+            self.status = VEHICLE_STATUS_PICKUP
             print(f"任务启动完成")
             print(f"车辆状态: {self.status}")
             print(f"任务状态: {self.current_task.status}")
@@ -115,8 +116,6 @@ class Vehicle:
             # 清除当前任务相关状态
             self.current_task = None
             self.status = VEHICLE_STATUS_IDLE
-            self.full_planned_path = []
-            self.current_execution_path = []
             print(f"清除任务相关状态")
             
             # 更新最后更新时间
@@ -181,12 +180,6 @@ class Vehicle:
     def is_empty(self) -> bool:
         """检查车辆是否为空"""
         return self.vehicle_type == VEHICLE_TYPE_EMPTY
-
-    def get_full_path_str(self) -> str:
-        """返回完整规划路径的字符串表示"""
-        if not self.full_planned_path:
-            return ""
-        return " -> ".join(f"({x},{y})" for x, y in self.full_planned_path)
 
     def get_remaining_path(self) -> List[Tuple[int, int]]:
         """获取车辆的剩余执行路径"""

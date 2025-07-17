@@ -31,13 +31,13 @@ class ConstraintManager:
         for position in locked_positions:
             del self.position_locks[position]
 
-    def check_path_conflicts(self, path: List[Tuple[int, int]]) -> List[str]:
+    def check_path_conflicts(self, path: List[Tuple[int, int]], vehicle: Vehicle) -> List[str]:
         """检测路径冲突"""
 
         # 检查路径中是否有冲突
         conflicting_vehicles = []
         for position in path:
-            if position in self.position_locks:
+            if position in self.position_locks and self.position_locks[position] != vehicle.id:
                 conflicting_vehicles.append(self.position_locks[position])
         
         return conflicting_vehicles

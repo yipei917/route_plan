@@ -1,7 +1,8 @@
 from typing import List, Tuple
-from src.models.grid import GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL, Grid
+from src.models.grid import GRID_TYPE_INTERFACE, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL, Grid
 from src.models.task import TASK_STATUS_PENDING, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TaskManager 
-from src.models.vehicle import VEHICLE_STATUS_IDLE, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, Vehicle
+from src.models.vehicle import (VEHICLE_STATUS_IDLE, VEHICLE_STATUS_PICKUP, VEHICLE_STATUS_DELIVER, 
+    VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, Vehicle)
 from src.models.constraints import ConstraintManager
 from src.utils.visualizer import GridVisualizer
 from src.utils.simulator import Simulator
@@ -72,47 +73,36 @@ class Scheduler:
 
     def check_status(self):
         for vehicle in self.vehicles:
-            # 检查车辆是否空闲
-            if vehicle.status == VEHICLE_STATUS_IDLE:
-                continue
-            
-            # todo 检查车辆是否在主通道上
-            # 检查车辆是否在主通道上
-            # if self.grid.get_cell(vehicle.current_position[0], vehicle.current_position[1]) != GRID_TYPE_MAIN_CHANNEL:
-            #     continue
-
-            # 检查车辆是否有当前任务
-            if vehicle.current_task is None:
-                continue
-                
             task = vehicle.current_task
+            if task is None: continue
+
+            if vehicle.current_position == task.start_position and vehicle.is_empty():
+                vehicle.vehicle_type = VEHICLE_TYPE_LOADED
+                if task.task_type == TASK_TYPE_OUTBOUND:
+                    self.grid.set_cargo(task.start_position[0], task.start_position[1], False)
+                vehicle.status = VEHICLE_STATUS_DELIVER
+            elif vehicle.current_position == task.end_position and not vehicle.is_empty():
+                vehicle.vehicle_type = VEHICLE_TYPE_EMPTY
+                if task.task_type == TASK_TYPE_INBOUND:
+                    self.grid.set_cargo(task.end_position[0], task.end_position[1], True)
+                vehicle.status = VEHICLE_STATUS_IDLE
+                vehicle.complete_task()
+
+            # 检查车辆是否在主通道上
+            cell = self.grid.get_cell(vehicle.current_position[0], vehicle.current_position[1])
+            if cell is None or cell.grid_type == GRID_TYPE_NORMAL_CHANNEL:
+                continue
             
-            # 当车辆到达起始位置时
-            if vehicle.current_position == task.start_position:
-                if vehicle.vehicle_type == VEHICLE_TYPE_EMPTY:  # 确保车辆是空载状态
-                    # 车辆载起货物
-                    vehicle.vehicle_type = VEHICLE_TYPE_LOADED
-                    # 更新起始位置格子的货物信息
-                    if task.task_type == TASK_TYPE_OUTBOUND:
-                        self.grid.set_cargo(task.start_position[0], task.start_position[1], False)
-                    # 规划去终点的路径
-                    path_to_end = self.path_planner.find_path(vehicle, task.start_position, task.end_position)
-                    if path_to_end:
-                        vehicle.set_full_planned_path(path_to_end)
-                        self.assign_path(vehicle)
-                    else:
-                        print(f"车辆 {vehicle.id} 无法找到到终点 {task.end_position} 的路径")
+            if vehicle.status == VEHICLE_STATUS_PICKUP:
+                path = self.path_planner.find_path(vehicle, vehicle.current_position, task.start_position)
+                if path is None: continue
+                vehicle.set_full_planned_path(path)
+            elif vehicle.status == VEHICLE_STATUS_DELIVER:
+                path = self.path_planner.find_path(vehicle, vehicle.current_position, task.end_position)
+                if path is None: continue
+                vehicle.set_full_planned_path(path)
             
-            # 当车辆到达终点位置时
-            elif vehicle.current_position == task.end_position:
-                if vehicle.vehicle_type == VEHICLE_TYPE_LOADED:  # 确保车辆是载货状态
-                    # 更新终点位置格子的货物信息（货物被放下）
-                    if task.task_type == TASK_TYPE_INBOUND:
-                        self.grid.set_cargo(task.end_position[0], task.end_position[1], True)
-                    # 车辆变为空载
-                    vehicle.vehicle_type = VEHICLE_TYPE_EMPTY
-                    # 结束任务
-                    vehicle.complete_task()
+            self.assign_path(vehicle)
 
     def analyze_path_segments(self, path: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
         """分析路径，将其分为主干道段和一般道路段"""
@@ -126,7 +116,7 @@ class Scheduler:
             cell = self.grid.get_cell(position[0], position[1])
             if cell is None:
                 break
-            if cell.grid_type == GRID_TYPE_MAIN_CHANNEL:
+            if cell.grid_type == GRID_TYPE_MAIN_CHANNEL or cell.grid_type == GRID_TYPE_INTERFACE:
                 num_main_channel += 1
             else:
                 break
@@ -141,7 +131,7 @@ class Scheduler:
                 cell = self.grid.get_cell(position[0], position[1])
                 if cell is None:
                     break
-                if cell.grid_type == GRID_TYPE_MAIN_CHANNEL:
+                if cell.grid_type == GRID_TYPE_MAIN_CHANNEL or cell.grid_type == GRID_TYPE_INTERFACE:
                     next_main_idx = idx
                     break
             if next_main_idx is not None:
@@ -156,60 +146,31 @@ class Scheduler:
 
     def assign_path(self, vehicle: Vehicle):
         """路径分配策略：主干道按step锁定，一般道路全部锁定"""
-        print(f"\n=== 为车辆 {vehicle.id} 分配路径约束 ===")
-        
+ 
         full_path = vehicle.full_planned_path
         if not full_path:
             print(f"车辆 {vehicle.id} 没有规划路径")
             return
-        
-        # 1. 分析路径段
+
+        # 分析路径段
         path_segments = self.analyze_path_segments(full_path)
-        print(f"路径分析结果:")
-        for i, (segment_type, positions) in enumerate(path_segments):
-            print(f"  段{i+1}: {segment_type}, 长度={len(positions)}")
-        
-        # 2. 确保车辆当前位置在主干道上
-        start_position = full_path[0]
-        start_cell = self.grid.get_cell(start_position[0], start_position[1])
-        if start_cell and start_cell.grid_type != GRID_TYPE_MAIN_CHANNEL:
-            print(f"⚠️ 警告：车辆 {vehicle.id} 起始位置 {start_position} 不在主干道上")
-        
-        # 3. 根据路径段类型分配约束
-        positions_to_lock = []
-        
-        for segment_type, positions in path_segments:
-            if segment_type == 'main_channel':
-                # 主干道：只锁定前step_size个坐标
-                lock_count = min(self.step_size, len(positions))
-                positions_to_lock.extend(positions[:lock_count])
-                print(f"  主干道段：锁定前 {lock_count}/{len(positions)} 个坐标")
-            else:
-                # 一般道路：锁定全部坐标
-                positions_to_lock.extend(positions)
-                print(f"  一般道路段：锁定全部 {len(positions)} 个坐标")
-        
-        # 4. 检查冲突
-        conflicts = self.constraint_manager.check_path_conflicts(positions_to_lock)
+
+        # 检查冲突
+        conflicts = self.constraint_manager.check_path_conflicts(path_segments, vehicle)
         if conflicts:
-            print(f"⚠️ 路径冲突，与车辆 {set(conflicts)} 冲突")
+            # todo 避让算法
+            print(f"路径冲突，与车辆 {set(conflicts)} 冲突")
             print("需要重新规划路径或等待")
-            # 暂时设置执行路径但不锁定约束
-            vehicle.set_current_execution_path(full_path)
-            return False
+            return
         
-        # 5. 添加路径约束
-        self.constraint_manager.add_path_constraint(vehicle, positions_to_lock)
+        # 添加路径约束
+        self.constraint_manager.add_path_constraint(vehicle, path_segments)
         
-        # 6. 设置执行路径
-        vehicle.set_current_execution_path(full_path)
-        
-        print(f"✅ 成功为车辆 {vehicle.id} 分配路径，锁定了 {len(positions_to_lock)} 个坐标")
-        return True
+        # 设置执行路径
+        vehicle.set_current_execution_path(path_segments)
 
     def release_vehicle_constraints(self, vehicle: Vehicle):
         """释放车辆的路径约束"""
-        print(f"\n=== 释放车辆 {vehicle.id} 的路径约束 ===")
         self.constraint_manager.remove_path_constraint(vehicle)
 
     def run(self):
