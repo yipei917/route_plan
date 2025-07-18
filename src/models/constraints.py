@@ -15,13 +15,16 @@ class ConstraintManager:
         print(f"\n=== 为车辆 {vehicle.id} 添加路径约束 ===")
         print(f"路径: {' -> '.join(str(p) for p in path)}")
         
-        # 如果车辆已有锁定的坐标，先清除
-        if vehicle.id in self.position_locks:
-            self.remove_path_constraint(vehicle)
+        # 先清除车辆之前的路径约束
+        self.remove_path_constraint(vehicle)
         
         # 锁定新路径中的所有坐标
         for position in path:
             self.position_locks[position] = vehicle.id
+
+    def add_vehicle_constraint(self, vehicle: Vehicle) -> None:
+        """为车辆添加路径约束"""
+        self.position_locks[vehicle.current_position] = vehicle.id
 
     def add_direction_constraint(self, vehicle: Vehicle, grid) -> None:
         """为负载车辆添加方向锁定约束"""
@@ -70,8 +73,12 @@ class ConstraintManager:
     def remove_path_constraint(self, vehicle: Vehicle) -> None:
         """删除车辆的所有约束信息"""
         
+        print(f"\n=== 释放车辆 {vehicle.id} 的路径约束 ===")
+        
         # 获取车辆锁定的所有坐标
         locked_positions = [pos for pos, vid in self.position_locks.items() if vid == vehicle.id]
+        
+        print(f"车辆 {vehicle.id} 锁定的位置: {locked_positions}")
         
         # 从位置锁定表中删除这些坐标
         for position in locked_positions:
@@ -91,10 +98,27 @@ class ConstraintManager:
     def check_path_conflicts(self, path: List[Tuple[int, int]], vehicle: Vehicle) -> List[str]:
         """检测路径冲突"""
 
+        print(f"\n=== 检测车辆 {vehicle.id} 的路径冲突 ===")
+        print(f"检查路径: {' -> '.join(str(p) for p in path)}")
+        
         # 检查路径中是否有冲突
         conflicting_vehicles = []
+        conflict_positions = []
+        
         for position in path:
             if position in self.position_locks and self.position_locks[position] != vehicle.id:
-                conflicting_vehicles.append(self.position_locks[position])
+                conflicting_vehicle_id = self.position_locks[position]
+                conflicting_vehicles.append(conflicting_vehicle_id)
+                conflict_positions.append((position, conflicting_vehicle_id))
+                print(f"  冲突位置 {position}: 被车辆 {conflicting_vehicle_id} 锁定")
+        
+        if conflicting_vehicles:
+            unique_conflicts = list(set(conflicting_vehicles))
+            print(f"发现冲突: 与车辆 {unique_conflicts} 在 {len(conflict_positions)} 个位置冲突")
+            print(f"冲突详情:")
+            for position, vehicle_id in conflict_positions:
+                print(f"  - 位置 {position}: 被车辆 {vehicle_id} 占用")
+        else:
+            print(f"未发现路径冲突")
         
         return conflicting_vehicles

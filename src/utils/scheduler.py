@@ -63,6 +63,7 @@ class Scheduler:
                 if vehicle.assign_task(task):
                     vehicle.set_full_planned_path(path_to_start)
                     self.assign_path(vehicle)
+                    vehicle.set_target_position(task.start_position)
                     vehicle.start_task()
                     idle_vehicles.remove(vehicle)
                     print(f"任务 {task.id} 已分配给车辆 {vehicle.id}")
@@ -81,6 +82,7 @@ class Scheduler:
                 if task.task_type == TASK_TYPE_OUTBOUND:
                     self.grid.set_cargo(task.start_position[0], task.start_position[1], False)
                 vehicle.status = VEHICLE_STATUS_DELIVER
+                vehicle.set_target_position(task.end_position)
             elif vehicle.current_position == task.end_position and not vehicle.is_empty():
                 vehicle.vehicle_type = VEHICLE_TYPE_EMPTY
                 if task.task_type == TASK_TYPE_INBOUND:
@@ -95,21 +97,17 @@ class Scheduler:
             if cell is None or cell.grid_type == GRID_TYPE_NORMAL_CHANNEL:
                 continue
             
-            if vehicle.status == VEHICLE_STATUS_PICKUP:
-                path = self.path_planner.find_path(vehicle, vehicle.current_position, task.start_position)
-                if path is None: continue
-                vehicle.set_full_planned_path(path)
-                self.assign_path(vehicle)
-            elif vehicle.status == VEHICLE_STATUS_DELIVER:
-                path = self.path_planner.find_path(vehicle, vehicle.current_position, task.end_position)
-                if path is None: continue
-                vehicle.set_full_planned_path(path)
-                self.constraint_manager.add_direction_constraint(vehicle, self.grid)
-                self.assign_path(vehicle)
-            elif vehicle.status == VEHICLE_STATUS_IDLE:
-                # todo 闲置车辆处理
+            target_position = vehicle.get_target_position()
+            if target_position is None: continue
+            path = self.path_planner.find_path(vehicle, vehicle.current_position, target_position)
+            if path is None: continue
+            vehicle.set_full_planned_path(path)
+            self.constraint_manager.add_direction_constraint(vehicle, self.grid)
+            self.assign_path(vehicle)
+
+            if vehicle.status == VEHICLE_STATUS_IDLE:
                 self.constraint_manager.remove_path_constraint(vehicle)
-            
+                vehicle.clear_path()
 
     def analyze_path_segments(self, path: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
         """分析路径，将其分为主干道段和一般道路段"""
@@ -123,7 +121,7 @@ class Scheduler:
             cell = self.grid.get_cell(position[0], position[1])
             if cell is None:
                 break
-            if cell.grid_type == GRID_TYPE_MAIN_CHANNEL or cell.grid_type == GRID_TYPE_INTERFACE or cell.grid_type == GRID_TYPE_UP_DOWN_CHANNEL:
+            if cell.grid_type == GRID_TYPE_MAIN_CHANNEL or cell.grid_type == GRID_TYPE_INTERFACE:
                 num_main_channel += 1
             else:
                 break
@@ -138,7 +136,7 @@ class Scheduler:
                 cell = self.grid.get_cell(position[0], position[1])
                 if cell is None:
                     break
-                if cell.grid_type == GRID_TYPE_MAIN_CHANNEL or cell.grid_type == GRID_TYPE_INTERFACE or cell.grid_type == GRID_TYPE_UP_DOWN_CHANNEL:
+                if cell.grid_type == GRID_TYPE_MAIN_CHANNEL or cell.grid_type == GRID_TYPE_INTERFACE:
                     next_main_idx = idx
                     break
             if next_main_idx is not None:
@@ -164,9 +162,7 @@ class Scheduler:
         # 检查冲突
         conflicts = self.constraint_manager.check_path_conflicts(path_segments, vehicle)
         if conflicts:
-            # todo 避让算法，等待算法
-            print(f"路径冲突，与车辆 {set(conflicts)} 冲突")
-            print("需要重新规划路径或等待")
+            self.conflict_strategy(vehicle, conflicts)
             return
         
         # 添加路径约束
@@ -174,6 +170,118 @@ class Scheduler:
         
         # 设置执行路径
         vehicle.set_current_execution_path(path_segments)
+
+    def conflict_strategy(self, vehicle: Vehicle, conflicts: List[str]):
+        conflict_vehicles = []
+        all_empty = True
+        working_in_normal_channel = False
+        for conflict in conflicts:
+            for v in self.vehicles:
+                if v.id == conflict:
+                    conflict_vehicles.append(v)
+                    if v.is_empty():
+                        if v.status == VEHICLE_STATUS_IDLE:
+                            if not self.avoid_strategy(v):
+                                print(f"车辆 {v.id} 避让失败，等待车辆 {v.id} 完成任务")
+                                return
+                        else:
+                            cell = self.grid.get_cell(v.current_position[0], v.current_position[1])
+                            if cell is None:
+                                continue
+                            if cell.grid_type == GRID_TYPE_NORMAL_CHANNEL:
+                                working_in_normal_channel = True
+                                break
+                    else:
+                        all_empty = False
+                        break
+
+        if working_in_normal_channel or not all_empty:
+            print(f"车辆 {vehicle.id} 与车辆 {conflict_vehicles} 冲突，等待车辆 {conflict_vehicles} 完成任务")
+            return
+        
+        if not vehicle.is_empty():
+            for v in conflict_vehicles:
+                print(f"车辆 {v.id} 为空，给车辆 {vehicle.id} 让路")
+                if not self.avoid_strategy(v):
+                    print(f"车辆 {v.id} 避让失败，等待车辆 {v.id} 完成任务")
+                    return
+        else:
+            vehicle_direction = self.get_vehicle_direction(vehicle)
+            for v in conflict_vehicles:
+                if self.get_vehicle_direction(v) == vehicle_direction:
+                    print(f"车辆 {v.id} 与车辆 {vehicle.id} 方向相同，等待车辆 {v.id} 完成任务")
+                else:
+                    print(f"车辆 {v.id} 与车辆 {vehicle.id} 方向不同，给车辆 {vehicle.id} 让路")
+                    if not self.avoid_strategy(v):
+                        print(f"车辆 {v.id} 避让失败，等待车辆 {v.id} 完成任务")
+                        return
+
+    def get_vehicle_direction(self, vehicle: Vehicle):
+        next_position = vehicle.get_full_planned_path()[1]
+        if next_position[0] > vehicle.current_position[0]:
+            return "right"
+        elif next_position[0] < vehicle.current_position[0]:
+            return "left"
+
+    def avoid_strategy(self, vehicle: Vehicle) -> bool:
+        """避让策略：车辆去到附近的主干道，并且对应的格子没人占用"""
+        print(f"\n=== 车辆 {vehicle.id} 执行避让策略 ===")
+        print(f"当前位置: {vehicle.current_position}")
+        
+        # 获取当前车辆所在的主干道行
+        x = vehicle.current_position[0]
+        y = vehicle.current_position[1]
+        
+        # 获取所有主干道行
+        main_rows = self.grid.main_channel_rows
+        print(f"主干道行: {main_rows}")
+        
+        # 寻找附近可用的主干道位置
+        available_positions = []
+        
+        for main_row in main_rows:
+            if y == main_row:
+                continue
+            position = (x, main_row)
+            if self.constraint_manager.position_locks.get(position) is None:
+                available_positions.append(position)
+
+                # 计算与当前位置的距离
+                distance = abs(x - vehicle.current_position[0])
+                available_positions.append((position, distance))
+                print(f"  发现可用位置 {position}, 距离: {distance}")
+        
+        if not available_positions:
+            print(f"  当前主干道列 {x} 没有可用位置")
+            return False
+        
+        # 选择最近的可用位置
+        available_positions.sort(key=lambda x: x[1])  # 按距离排序
+        best_position = available_positions[0][0]
+        distance = available_positions[0][1]
+        
+        print(f"  选择最佳避让位置: {best_position}, 距离: {distance}")
+        
+        # 规划到避让位置的路径
+        path_to_avoid = self.path_planner.find_path(vehicle, vehicle.current_position, best_position)
+        if path_to_avoid is None:
+            print(f"  无法找到到避让位置 {best_position} 的路径")
+            return False
+        
+        print(f"  避让路径: {' -> '.join(str(p) for p in path_to_avoid)}")
+        
+        # 检查避让路径是否有冲突
+        conflicts = self.constraint_manager.check_path_conflicts(path_to_avoid, vehicle)
+        if conflicts:
+            print(f"  避让路径存在冲突: {conflicts}")
+            return False
+
+        # 添加路径约束
+        self.constraint_manager.add_path_constraint(vehicle, path_to_avoid)
+        vehicle.set_current_execution_path(path_to_avoid)
+        
+        print(f"  避让策略执行成功，车辆 {vehicle.id} 将移动到 {best_position}")
+        return True
 
     def run(self):
         self.visualize("test_0.png")

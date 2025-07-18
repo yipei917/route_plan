@@ -19,6 +19,7 @@ class Vehicle:
     id: str
     vehicle_type: str
     current_position: Tuple[int, int]
+    target_position: Optional[Tuple[int, int]] = None  # 目标坐标
     status: str = VEHICLE_STATUS_IDLE
     full_planned_path: List[Tuple[int, int]] = field(default_factory=list)  # 完整规划路径
     current_execution_path: List[Tuple[int, int]] = field(default_factory=list)  # 当前执行路径
@@ -115,6 +116,7 @@ class Vehicle:
             
             # 清除当前任务相关状态
             self.current_task = None
+            self.target_position = None
             self.status = VEHICLE_STATUS_IDLE
             print(f"清除任务相关状态")
             
@@ -167,7 +169,7 @@ class Vehicle:
         self.current_execution_path = path
         self.current_path_index = 0
         print(f"当前执行路径已设置")
-        print(f"目标位置: {path[-1]}")
+        print(f"当前目标位置: {path[-1]}")
         print(f"执行路径: {' -> '.join(str(p) for p in path)}")
 
     def get_next_position(self) -> Optional[Tuple[int, int]]:
@@ -183,3 +185,17 @@ class Vehicle:
 
     def get_full_planned_path(self) -> List[Tuple[int, int]]:
         return self.full_planned_path
+
+    def set_target_position(self, target: Tuple[int, int]) -> None:
+        """设置目标坐标"""
+        self.target_position = target
+
+    def get_target_position(self) -> Optional[Tuple[int, int]]:
+        """获取目标坐标"""
+        return self.target_position
+
+    def clear_path(self) -> None:
+        """清除路径"""
+        self.full_planned_path = []
+        self.current_execution_path = []
+        self.current_path_index = 0

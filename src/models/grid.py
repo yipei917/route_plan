@@ -174,3 +174,6 @@ class Grid:
                 # 统计主干道（main channel）所在的行，避免重复添加
                 if grid_type == GRID_TYPE_MAIN_CHANNEL and y not in self.main_channel_rows:
                     self.main_channel_rows.append(y)
+
+    def get_main_rows(self) -> List[int]:
+        return self.main_channel_rows
