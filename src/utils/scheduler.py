@@ -72,6 +72,7 @@ class Scheduler:
         return
 
     def check_status(self):
+        """检查车辆状态并处理状态转换"""
         for vehicle in self.vehicles:
             task = vehicle.current_task
             if task is None: continue
@@ -244,10 +245,8 @@ class Scheduler:
                 continue
             position = (x, main_row)
             if self.constraint_manager.position_locks.get(position) is None:
-                available_positions.append(position)
-
                 # 计算与当前位置的距离
-                distance = abs(x - vehicle.current_position[0])
+                distance = abs(main_row - y)  # 行距离
                 available_positions.append((position, distance))
                 print(f"  发现可用位置 {position}, 距离: {distance}")
         
