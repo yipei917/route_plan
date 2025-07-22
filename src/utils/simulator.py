@@ -2,7 +2,7 @@ from typing import List
 from src.models.vehicle import VEHICLE_STATUS_IDLE, Vehicle
 
 class Simulator:
-    """模拟器类，管理车辆移动和状态更新"""
+    """模拟器类，管理车辆移动"""
 
     def __init__(self):
         self.vehicles: List[Vehicle] = []

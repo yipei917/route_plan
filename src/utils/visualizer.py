@@ -2,7 +2,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from typing import List, Tuple
 from src.models.grid import Grid, GRID_TYPE_NORMAL_CHANNEL, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_OBSTACLE, GRID_TYPE_INTERFACE, GRID_TYPE_UP_DOWN_CHANNEL
-from src.models.vehicle import Vehicle
+from src.models.vehicle import VEHICLE_STATUS_AVOIDING, VEHICLE_STATUS_DELIVER, VEHICLE_STATUS_IDLE, VEHICLE_STATUS_PICKUP, VEHICLE_STATUS_WAITING, Vehicle
+import os
 
 class GridVisualizer:
     """网格可视化器"""
@@ -22,8 +23,11 @@ class GridVisualizer:
         
         # 设置车辆颜色
         self.vehicle_colors = {
-            "empty": 'blue',
-            "loaded": 'green'
+            VEHICLE_STATUS_PICKUP: 'blue',
+            VEHICLE_STATUS_DELIVER: 'green',
+            VEHICLE_STATUS_AVOIDING: 'orange',
+            VEHICLE_STATUS_IDLE: 'gray',
+            VEHICLE_STATUS_WAITING: 'red'
         }
         
         # 设置方向箭头
@@ -87,10 +91,10 @@ class GridVisualizer:
             x, y = v.current_position
             rx = x
             ry = self.grid.height - 1 - y
-            color = self.vehicle_colors.get(v.vehicle_type, 'blue')
+            color = self.vehicle_colors.get(v.status, 'blue')
             
             # 绘制车辆圆形
-            vehicle_circle = patches.Circle((rx, ry), 0.35, facecolor=color, edgecolor='black', linewidth=2, alpha=0.9, zorder=10)
+            vehicle_circle = patches.Circle((rx, ry), 0.35, facecolor=color, edgecolor='black', linewidth=4, alpha=0.9, zorder=10)
             self.ax.add_patch(vehicle_circle)
             
             # 标注车辆编号
@@ -116,7 +120,26 @@ class GridVisualizer:
         """保存图像"""
         plt.savefig(filename, dpi=100, bbox_inches='tight')
     
-    def show(self) -> None:
-        """显示图像"""
-        plt.show()
-        plt.close()
+    def visualize(self, path_name: str, filename: str) -> None:
+        """可视化当前状态, 保存到output目录"""
+        self.draw_grid()
+        self.draw_vehicles()
+        full_path = os.path.join(path_name, filename)
+        self.save(full_path)
+    
+    def get_image_data(self) -> str:
+        """获取图像数据（base64编码）"""
+        import io
+        import base64
+        
+        # 将图像保存到内存缓冲区，降低DPI以提高速度
+        img_buffer = io.BytesIO()
+        plt.savefig(img_buffer, format='png', dpi=50, bbox_inches='tight', 
+                   facecolor='white', edgecolor='none')
+        img_buffer.seek(0)
+        
+        # 转换为base64编码
+        img_data = base64.b64encode(img_buffer.getvalue()).decode()
+        img_buffer.close()
+        
+        return img_data

@@ -1,7 +1,6 @@
 from typing import List, Tuple, Optional, Dict, Set
 from src.models.grid import Grid
 from src.models.vehicle import Vehicle
-from src.models.constraints import ConstraintManager
 import heapq
 
 class AStarPlanner:

@@ -1,18 +1,18 @@
+import os
 from typing import List, Tuple
-from src.models.grid import GRID_TYPE_INTERFACE, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL, GRID_TYPE_UP_DOWN_CHANNEL, Grid
+from src.models.grid import GRID_TYPE_INTERFACE, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL, Grid
 from src.models.task import TASK_STATUS_PENDING, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TaskManager 
-from src.models.vehicle import (VEHICLE_STATUS_IDLE, VEHICLE_STATUS_PICKUP, VEHICLE_STATUS_DELIVER, 
+from src.models.vehicle import (VEHICLE_STATUS_AVOIDING, VEHICLE_STATUS_IDLE, VEHICLE_STATUS_PICKUP, VEHICLE_STATUS_DELIVER, 
     VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, Vehicle)
-from src.models.constraints import ConstraintManager
+from src.utils.constraints import ConstraintManager
 from src.utils.visualizer import GridVisualizer
 from src.utils.simulator import Simulator
 from src.algorithms.a_star import AStarPlanner
-import os
 
 class Scheduler:
     """调度器类，管理任务分配和路径规划"""
 
-    def __init__(self, num_vehicles: int, step_size: int):
+    def __init__(self, num_vehicles: int, step_size: int, output_path = "output"):
         self.grid = Grid(10, 10)
         self.task_manager = TaskManager()
         self.path_planner = AStarPlanner(self.grid)
@@ -22,12 +22,16 @@ class Scheduler:
         self.simulator = Simulator()
         self.constraint_manager = ConstraintManager()
         self.step_size = step_size
+        self.output_path = output_path
 
     def initialize(self) -> None:
         """初始化地图、车辆、模拟器和约束"""
         # 加载地图
         self.grid.load_map_from_xlsx("resource/test_map.xlsx")
         self.task_manager.load_tasks_from_xlsx("resource/test_task.xlsx")
+
+        # 创建输出目录
+        os.makedirs(self.output_path, exist_ok=True)
 
         # 添加车辆
         vehicle_position = [(8,7), (10,7), (12,7), (14,7), (16,7), (18,7)]
@@ -40,13 +44,6 @@ class Scheduler:
             self.vehicles.append(v)
             self.grid_visualizer.add_vehicle(v)
             self.simulator.add_vehicle(v)
-        
-    def visualize(self, filename: str) -> None:
-        """可视化当前状态, 保存到output目录"""
-        self.grid_visualizer.draw_grid()
-        self.grid_visualizer.draw_vehicles()
-        full_path = os.path.join("output", filename)
-        self.grid_visualizer.save(full_path)
 
     def assign_task(self):
         pending_tasks = self.task_manager.get_tasks_by_status(TASK_STATUS_PENDING)
@@ -75,6 +72,20 @@ class Scheduler:
         """检查车辆状态并处理状态转换"""
         for vehicle in self.vehicles:
             task = vehicle.current_task
+            cell = self.grid.get_cell(vehicle.current_position[0], vehicle.current_position[1])
+            on_main = cell is not None and (cell.grid_type == GRID_TYPE_MAIN_CHANNEL or cell.grid_type == GRID_TYPE_INTERFACE)
+            
+            if vehicle.status == VEHICLE_STATUS_AVOIDING and vehicle.current_position == vehicle.avoid_position:
+                vehicle.avoid_position = None
+                if task is None:
+                    vehicle.status = VEHICLE_STATUS_IDLE
+                else:
+                    vehicle.status = VEHICLE_STATUS_PICKUP
+
+            if vehicle.status == VEHICLE_STATUS_IDLE and on_main:
+                self.constraint_manager.remove_path_constraint(vehicle)
+                vehicle.clear_path()
+
             if task is None: continue
 
             # 检查车辆是否在起点或终点
@@ -94,9 +105,7 @@ class Scheduler:
                 vehicle.complete_task()
 
             # 检查车辆是否在主通道上
-            cell = self.grid.get_cell(vehicle.current_position[0], vehicle.current_position[1])
-            if cell is None or cell.grid_type == GRID_TYPE_NORMAL_CHANNEL:
-                continue
+            if not on_main: continue
             
             target_position = vehicle.get_target_position()
             if target_position is None: continue
@@ -105,10 +114,6 @@ class Scheduler:
             vehicle.set_full_planned_path(path)
             self.constraint_manager.add_direction_constraint(vehicle, self.grid)
             self.assign_path(vehicle)
-
-            if vehicle.status == VEHICLE_STATUS_IDLE:
-                self.constraint_manager.remove_path_constraint(vehicle)
-                vehicle.clear_path()
 
     def analyze_path_segments(self, path: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
         """分析路径，将其分为主干道段和一般道路段"""
@@ -278,12 +283,14 @@ class Scheduler:
         # 添加路径约束
         self.constraint_manager.add_path_constraint(vehicle, path_to_avoid)
         vehicle.set_current_execution_path(path_to_avoid)
+        vehicle.avoid_position = best_position
+        vehicle.status = VEHICLE_STATUS_AVOIDING
         
         print(f"  避让策略执行成功，车辆 {vehicle.id} 将移动到 {best_position}")
         return True
 
     def run(self):
-        self.visualize("test_0.png")
+        self.grid_visualizer.visualize(self.output_path, "test_0.png")
         i = 1
         while True:
             print("--------------------------------")
@@ -294,5 +301,5 @@ class Scheduler:
                 print("所有任务均已完成，模拟结束")
                 break
             self.check_status()
-            self.visualize(f"test_{i}.png")
+            self.grid_visualizer.visualize(self.output_path, f"test_{i}.png")
             i += 1

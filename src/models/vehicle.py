@@ -20,6 +20,7 @@ class Vehicle:
     vehicle_type: str
     current_position: Tuple[int, int]
     target_position: Optional[Tuple[int, int]] = None  # 目标坐标
+    avoid_position: Optional[Tuple[int, int]] = None  # 避让位置
     status: str = VEHICLE_STATUS_IDLE
     full_planned_path: List[Tuple[int, int]] = field(default_factory=list)  # 完整规划路径
     current_execution_path: List[Tuple[int, int]] = field(default_factory=list)  # 当前执行路径

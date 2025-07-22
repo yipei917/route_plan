@@ -1,6 +1,6 @@
 from typing import List, Tuple, Dict
-from .vehicle import Vehicle
-from .grid import GRID_TYPE_MAIN_CHANNEL, MAIN_CHANNEL_STATUS_LEFT, MAIN_CHANNEL_STATUS_RIGHT, MAIN_CHANNEL_STATUS_NULL
+from src.models.vehicle import Vehicle
+from src.models.grid import GRID_TYPE_MAIN_CHANNEL, MAIN_CHANNEL_STATUS_LEFT, MAIN_CHANNEL_STATUS_RIGHT, MAIN_CHANNEL_STATUS_NULL
 
 class ConstraintManager:
     """约束管理器 - 管理车辆路径冲突检测、坐标锁定和方向锁定"""
