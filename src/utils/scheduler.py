@@ -79,6 +79,8 @@ class Scheduler:
             # 避让完成
             if vehicle.status == VEHICLE_STATUS_AVOIDING and vehicle.current_position == vehicle.avoid_position:
                 vehicle.avoid_position = None
+                vehicle.clear_path()
+                self.constraint_manager.remove_path_constraint(vehicle)
                 if task is None:
                     vehicle.status = VEHICLE_STATUS_IDLE
                 else:
