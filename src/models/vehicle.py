@@ -22,12 +22,15 @@ class Vehicle:
     target_position: Optional[Tuple[int, int]] = None  # 目标坐标
     avoid_position: Optional[Tuple[int, int]] = None  # 避让位置
     status: str = VEHICLE_STATUS_IDLE
+    last_status: str = VEHICLE_STATUS_IDLE
     full_planned_path: List[Tuple[int, int]] = field(default_factory=list)  # 完整规划路径
     current_execution_path: List[Tuple[int, int]] = field(default_factory=list)  # 当前执行路径
     current_task: Optional[TransportTask] = None
     task_history: List[TransportTask] = field(default_factory=list)
     last_update_time = datetime.now()
     current_path_index = 0
+    waiting_list: List[str] = field(default_factory=list)  # 等待的车辆编号列表
+    expeller: Optional[str] = None  # 驱赶者的编号
 
     def assign_task(self, task: TransportTask) -> bool:
         """Assign a task to the vehicle"""
@@ -200,3 +203,51 @@ class Vehicle:
         self.full_planned_path = []
         self.current_execution_path = []
         self.current_path_index = 0
+
+    def remove_from_waiting_list(self, vehicle_id: str) -> bool:
+        """从等待列表中删除指定车辆，并判断是否还有等待的车辆"""
+        print(f"\n=== 从等待列表中删除车辆 ===")
+        print(f"当前等待列表: {self.waiting_list}")
+        print(f"要删除的车辆: {vehicle_id}")
+        
+        if vehicle_id in self.waiting_list:
+            self.waiting_list.remove(vehicle_id)
+            print(f"车辆 {vehicle_id} 已从等待列表中删除")
+        else:
+            print(f"车辆 {vehicle_id} 不在等待列表中")
+        
+        remaining_count = len(self.waiting_list)
+        print(f"剩余等待车辆数量: {remaining_count}")
+        print(f"更新后的等待列表: {self.waiting_list}")
+        
+        # 返回是否还有等待的车辆
+        has_waiting = remaining_count > 0
+        print(f"是否还有等待的车辆: {has_waiting}")
+        
+        return has_waiting
+
+    def add_to_waiting_list(self, vehicle_id: str) -> None:
+        """添加车辆到等待列表"""
+        if vehicle_id not in self.waiting_list:
+            self.waiting_list.append(vehicle_id)
+            print(f"车辆 {vehicle_id} 已添加到等待列表")
+        else:
+            print(f"车辆 {vehicle_id} 已在等待列表中")
+
+    def set_expeller(self, vehicle_id: str) -> None:
+        """设置驱赶者"""
+        self.expeller = vehicle_id
+        print(f"设置驱赶者: {vehicle_id}")
+
+    def clear_expeller(self) -> None:
+        """清除驱赶者"""
+        self.expeller = None
+        print("清除驱赶者")
+
+    def get_waiting_count(self) -> int:
+        """获取等待车辆数量"""
+        return len(self.waiting_list)
+
+    def is_waiting(self, vehicle_id: str) -> bool:
+        """检查指定车辆是否在等待列表中"""
+        return vehicle_id in self.waiting_list
