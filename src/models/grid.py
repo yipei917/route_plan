@@ -86,7 +86,7 @@ class Grid:
     def get_cell(self, x: int, y: int) -> Optional[GridCell]:
         """获取格子"""
         return self.cells.get((x, y))
-
+        
     def get_neighbors(self, x: int, y: int, is_empty: bool) -> List[Tuple[int, int]]:
         """获取相邻格子"""
         neighbors = []
