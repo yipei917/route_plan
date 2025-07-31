@@ -1,6 +1,6 @@
 import os
 from typing import List, Tuple
-from src.models.grid import GRID_TYPE_INTERFACE, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL, Grid
+from src.models.grid import GRID_TYPE_INTERFACE, GRID_TYPE_MAIN_CHANNEL, GRID_TYPE_NORMAL_CHANNEL, GRID_TYPE_UP_DOWN_CHANNEL, Grid
 from src.models.task import TASK_STATUS_PENDING, TASK_TYPE_INBOUND, TASK_TYPE_OUTBOUND, TaskManager 
 from src.models.vehicle import (VEHICLE_STATUS_AVOIDING, VEHICLE_STATUS_IDLE, VEHICLE_STATUS_PICKUP, 
     VEHICLE_STATUS_DELIVER, VEHICLE_STATUS_WAITING, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED, Vehicle)
@@ -14,15 +14,15 @@ class Scheduler:
 
     def __init__(self, num_vehicles: int, step_size: int, output_path = "output"):
         self.grid = Grid(10, 10)
+        self.num_vehicles = num_vehicles
+        self.step_size = step_size
+        self.output_path = output_path
+        self.vehicles: List[Vehicle] = []
         self.task_manager = TaskManager()
         self.path_planner = AStarPlanner(self.grid)
-        self.vehicles: List[Vehicle] = []
-        self.num_vehicles = num_vehicles
         self.grid_visualizer = GridVisualizer(self.grid, figsize=(40,40))
         self.simulator = Simulator()
         self.constraint_manager = ConstraintManager()
-        self.step_size = step_size
-        self.output_path = output_path
 
     def initialize(self) -> None:
         """初始化地图、车辆、模拟器和约束"""
@@ -44,6 +44,7 @@ class Scheduler:
             self.vehicles.append(v)
             self.grid_visualizer.add_vehicle(v)
             self.simulator.add_vehicle(v)
+            self.constraint_manager.add_vehicle_constraint(v)
 
     def assign_task(self):
         """分配任务"""
@@ -105,7 +106,7 @@ class Scheduler:
                 else:
                     vehicle.status = VEHICLE_STATUS_PICKUP
                 expeller = next((v for v in self.vehicles if v.id == vehicle.expeller), None)
-                if expeller is not None:
+                if expeller is not None: # todo 递归等待处理
                     if not expeller.remove_from_waiting_list(vehicle.id):
                         expeller.status = expeller.last_status
                         self.planning_path(expeller)
@@ -114,6 +115,7 @@ class Scheduler:
             if vehicle.status == VEHICLE_STATUS_IDLE and on_main:
                 self.constraint_manager.remove_path_constraint(vehicle)
                 vehicle.clear_path()
+                self.constraint_manager.add_vehicle_constraint(vehicle)
 
             # 确保车辆有任务
             if task is None: continue
@@ -205,50 +207,50 @@ class Scheduler:
         # 设置执行路径
         vehicle.set_current_execution_path(path_segments)
 
-    def conflict_strategy(self, vehicle: Vehicle, conflicts: List[str]):
-        conflict_vehicles = []
+    def conflict_strategy(self, vehicle: Vehicle, conflicts: List[str]): # todo 避让失败处理
+        # 获取冲突车辆
+        conflict_vehicles = [v for v in self.vehicles if v.id in conflicts]
+
+        # 检查冲突车辆是否在主干道且全空
         all_empty = True
         working_in_normal_channel = False
+        same_row = True
 
-        for conflict in conflicts:
-            for v in self.vehicles:
-                if v.id == conflict:
-                    conflict_vehicles.append(v)
-                    if v.is_empty():
-                        if v.status == VEHICLE_STATUS_IDLE:
-                            if not self.avoid_strategy(v, vehicle):
-                                print(f"车辆 {v.id} 避让失败，等待车辆 {v.id} 完成任务")
-                                return
-                        else:
-                            cell = self.grid.get_cell(v.current_position[0], v.current_position[1])
-                            if cell is None:
-                                continue
-                            if cell.grid_type == GRID_TYPE_NORMAL_CHANNEL:
-                                working_in_normal_channel = True
-                                break
-                    else:
-                        all_empty = False
+        for conflict_vehicle in conflict_vehicles:
+            if conflict_vehicle.current_position[1] != vehicle.current_position[1]:
+                same_row = False
+                break
+            if conflict_vehicle.is_empty():
+                if conflict_vehicle.status != VEHICLE_STATUS_IDLE:
+                    grid_type = self.grid.get_cell_type(conflict_vehicle.current_position)
+                    if grid_type == GRID_TYPE_NORMAL_CHANNEL or grid_type == GRID_TYPE_UP_DOWN_CHANNEL:
+                        working_in_normal_channel = True
                         break
+            else:
+                all_empty = False
+                break
 
-        if working_in_normal_channel or not all_empty:
-            print(f"车辆 {vehicle.id} 与车辆 {conflict_vehicles} 冲突，等待车辆 {conflict_vehicles} 完成任务")
+        if working_in_normal_channel or not all_empty or not same_row:
+            print(f"车辆 {vehicle.id} 与车辆 {', '.join(v.id for v in conflict_vehicles)} 冲突，等待车辆 {', '.join(v.id for v in conflict_vehicles)} 完成任务")
             return
         
+        # 冲突车辆给非空车让路
         if not vehicle.is_empty():
-            for v in conflict_vehicles:
-                print(f"车辆 {v.id} 为空，给车辆 {vehicle.id} 让路")
-                if not self.avoid_strategy(v, vehicle):
-                    print(f"车辆 {v.id} 避让失败，等待车辆 {v.id} 完成任务")
+            for conflict_vehicle in conflict_vehicles:
+                print(f"车辆 {conflict_vehicle.id} 给车辆 {vehicle.id} 让路")
+                if not self.avoid_strategy(conflict_vehicle, vehicle):
+                    print(f"车辆 {conflict_vehicle.id} 避让失败，等待车辆 {conflict_vehicle.id} 完成任务")
                     return
+        # 冲突车辆给对向空车让路
         else:
             vehicle_direction = self.get_vehicle_direction(vehicle)
-            for v in conflict_vehicles:
-                if self.get_vehicle_direction(v) == vehicle_direction:
-                    print(f"车辆 {v.id} 与车辆 {vehicle.id} 方向相同，等待车辆 {v.id} 完成任务")
+            for conflict_vehicle in conflict_vehicles:
+                if self.get_vehicle_direction(conflict_vehicle) == vehicle_direction:
+                    print(f"车辆 {conflict_vehicle.id} 与车辆 {vehicle.id} 方向相同，等待车辆 {conflict_vehicle.id} 完成任务")
                 else:
-                    print(f"车辆 {v.id} 与车辆 {vehicle.id} 方向不同，给车辆 {vehicle.id} 让路")
-                    if not self.avoid_strategy(v, vehicle):
-                        print(f"车辆 {v.id} 避让失败，等待车辆 {v.id} 完成任务")
+                    print(f"车辆 {conflict_vehicle.id} 与车辆 {vehicle.id} 方向不同，给车辆 {vehicle.id} 让路")
+                    if not self.avoid_strategy(conflict_vehicle, vehicle):
+                        print(f"车辆 {conflict_vehicle.id} 避让失败，等待车辆 {conflict_vehicle.id} 完成任务")
                         return
 
     def get_vehicle_direction(self, vehicle: Vehicle):
@@ -258,27 +260,25 @@ class Scheduler:
         elif next_position[0] < vehicle.current_position[0]:
             return "left"
 
-    def avoid_strategy(self, vehicle: Vehicle, expeller: Vehicle) -> bool:
+    def avoid_strategy(self, avoid_vehicle: Vehicle, expeller: Vehicle) -> bool:
         """避让策略：车辆去到附近的主干道，并且对应的格子没人占用"""
-        print(f"\n=== 车辆 {vehicle.id} 执行避让策略 ===")
-        print(f"当前位置: {vehicle.current_position}")
+        print(f"\n=== 车辆 {avoid_vehicle.id} 执行避让策略 ===")
+        print(f"当前位置: {avoid_vehicle.current_position}")
         
         # 获取当前车辆所在的主干道行
-        x = vehicle.current_position[0]
-        y = vehicle.current_position[1]
+        x = avoid_vehicle.current_position[0]
+        y = avoid_vehicle.current_position[1]
         
         # 获取所有主干道行
         main_rows = self.grid.main_channel_rows
-        print(f"主干道行: {main_rows}")
         
         # 寻找附近可用的主干道位置
         available_positions = []
         
         for main_row in main_rows:
-            if y == main_row:
-                continue
+            if y == main_row: continue
             position = (x, main_row)
-            if self.constraint_manager.position_locks.get(position) is None:
+            if self.constraint_manager.position_locks.get(position) is None and self.path_planner.find_path(avoid_vehicle, avoid_vehicle.current_position, position) is not None:
                 # 计算与当前位置的距离
                 distance = abs(main_row - y)  # 行距离
                 available_positions.append((position, distance))
@@ -296,36 +296,32 @@ class Scheduler:
         print(f"  选择最佳避让位置: {best_position}, 距离: {distance}")
         
         # 规划到避让位置的路径
-        path_to_avoid = self.path_planner.find_path(vehicle, vehicle.current_position, best_position)
-        if path_to_avoid is None:
-            print(f"  无法找到到避让位置 {best_position} 的路径")
-            return False
-        
+        path_to_avoid = self.path_planner.find_path(avoid_vehicle, avoid_vehicle.current_position, best_position)
         print(f"  避让路径: {' -> '.join(str(p) for p in path_to_avoid)}")
         
         # 检查避让路径是否有冲突
-        conflicts = self.constraint_manager.check_path_conflicts(path_to_avoid, vehicle)
+        conflicts = self.constraint_manager.check_path_conflicts(path_to_avoid, avoid_vehicle)
         if conflicts:
-            print(f"  避让路径存在冲突: {conflicts}")
+            print(f"  避让路径存在冲突: {', '.join(v.id for v in conflicts)}")
             return False
 
         # 添加路径约束
-        self.constraint_manager.add_path_constraint(vehicle, path_to_avoid)
-        vehicle.set_current_execution_path(path_to_avoid)
+        self.constraint_manager.add_path_constraint(avoid_vehicle, path_to_avoid)
+        avoid_vehicle.set_current_execution_path(path_to_avoid)
 
         # 设置避让状态
-        vehicle.avoid_position = best_position
-        vehicle.status = VEHICLE_STATUS_AVOIDING
-        vehicle.set_expeller(expeller.id)
-        expeller.add_to_waiting_list(vehicle.id)
+        avoid_vehicle.avoid_position = best_position
+        avoid_vehicle.status = VEHICLE_STATUS_AVOIDING
+        avoid_vehicle.set_expeller(expeller.id)
+        expeller.add_to_waiting_list(avoid_vehicle.id)
         expeller.last_status = expeller.status
         expeller.status = VEHICLE_STATUS_WAITING
         
-        print(f"  避让策略执行成功，车辆 {vehicle.id} 将移动到 {best_position}")
+        print(f"  避让策略执行成功，车辆 {avoid_vehicle.id} 将移动到 {best_position}")
         return True
 
-    def run(self):
-        self.grid_visualizer.visualize(self.output_path, "test_0.png")
+    def run(self, visualize: bool = True):
+        if visualize: self.grid_visualizer.visualize(self.output_path, "test_0.png")
         i = 1
         while True:
             print("--------------------------------")
@@ -336,5 +332,5 @@ class Scheduler:
                 print("所有任务均已完成，模拟结束")
                 break
             self.check_status()
-            self.grid_visualizer.visualize(self.output_path, f"test_{i}.png")
+            if visualize: self.grid_visualizer.visualize(self.output_path, f"test_{i}.png")
             i += 1

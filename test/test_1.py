@@ -5,7 +5,7 @@ from src.models.vehicle import VEHICLE_TYPE_EMPTY, Vehicle
 if __name__ == "__main__":
     scheduler = Scheduler(num_vehicles=2, step_size=3, output_path="output/test_1")
     scheduler.grid.load_map_from_xlsx("resource/test_map.xlsx")
-    scheduler.task_manager.add_task(task_type=TASK_TYPE_OUTBOUND,start_pos=(10,6),end_pos=(18,15))
+    scheduler.task_manager.add_task(task_type=TASK_TYPE_OUTBOUND,start_pos=(10,6),end_pos=(11,7))
     scheduler.task_manager.add_task(task_type=TASK_TYPE_INBOUND,start_pos=(2,8),end_pos=(3,6))
     # 添加车辆
     vehicle_position = [(6,7), (12,7)]

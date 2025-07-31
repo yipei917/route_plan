@@ -132,8 +132,6 @@ class ConstraintManager:
                 print(f"  冲突位置 {position}: 被车辆 {conflicting_vehicle_id} 锁定")
         
         if conflicting_vehicles:
-            unique_conflicts = list(set(conflicting_vehicles))
-            print(f"发现冲突: 与车辆 {unique_conflicts} 在 {len(conflict_positions)} 个位置冲突")
             print(f"冲突详情:")
             for position, vehicle_id in conflict_positions:
                 print(f"  - 位置 {position}: 被车辆 {vehicle_id} 占用")
