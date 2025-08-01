@@ -4,6 +4,7 @@ from src.models.vehicle import VEHICLE_TYPE_EMPTY, Vehicle
 import os
 import sys
 
+# 测试一，基础避让功能
 def test_1():
     scheduler = Scheduler(num_vehicles=2, step_size=3, output_path="output/test_1")
     os.makedirs("output/test_1", exist_ok=True)
@@ -24,6 +25,7 @@ def test_1():
 
     scheduler.run()
 
+# 测试二，驱除主干道空闲车
 def test_2():
     scheduler = Scheduler(num_vehicles=2, step_size=3, output_path="output/test_2")
     os.makedirs("output/test_2", exist_ok=True)
