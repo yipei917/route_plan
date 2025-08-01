@@ -254,6 +254,7 @@ class Scheduler:
                         return
 
     def get_vehicle_direction(self, vehicle: Vehicle):
+        if not vehicle.full_planned_path: return None
         next_position = vehicle.get_full_planned_path()[1]
         if next_position[0] > vehicle.current_position[0]:
             return "right"

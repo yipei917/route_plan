@@ -29,9 +29,8 @@ def test_2():
     os.makedirs("output/test_2", exist_ok=True)
     scheduler.grid.load_map_from_xlsx("resource/test_map.xlsx")
     scheduler.task_manager.add_task(task_type=TASK_TYPE_OUTBOUND,start_pos=(10,6),end_pos=(11,7))
-    scheduler.task_manager.add_task(task_type=TASK_TYPE_INBOUND,start_pos=(2,8),end_pos=(3,6))
     # 添加车辆
-    vehicle_position = [(6,7), (12,7)]
+    vehicle_position = [(3,7), (8,7)]
     for i in range(scheduler.num_vehicles):
         v = Vehicle(
                 id=f"V{i+1}",
