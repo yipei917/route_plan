@@ -45,6 +45,27 @@ def test_2():
 
     scheduler.run()
 
+# 测试三，无法避让情况，todo
+def test_3():
+    scheduler = Scheduler(num_vehicles=2, step_size=3, output_path="output/test_3")
+    os.makedirs("output/test_3", exist_ok=True)
+    scheduler.grid.load_map_from_xlsx("resource/test_map.xlsx")
+    scheduler.task_manager.add_task(task_type=TASK_TYPE_OUTBOUND,start_pos=(15,6),end_pos=(8,7))
+    scheduler.task_manager.add_task(task_type=TASK_TYPE_OUTBOUND,start_pos=(8,6),end_pos=(15,7))
+    # 添加车辆
+    vehicle_position = [(8,7), (15,7)]
+    for i in range(scheduler.num_vehicles):
+        v = Vehicle(
+                id=f"V{i+1}",
+                vehicle_type=VEHICLE_TYPE_EMPTY,
+                current_position=vehicle_position[i]
+            )
+        scheduler.vehicles.append(v)
+        scheduler.grid_visualizer.add_vehicle(v)
+        scheduler.simulator.add_vehicle(v)
+
+    scheduler.run()
+
 if __name__ == "__main__":
     # 获取命令行参数，默认为 test_1
     test_name = sys.argv[1] if len(sys.argv) > 1 else "1"
@@ -53,6 +74,8 @@ if __name__ == "__main__":
         test_1()
     elif test_name == "2":
         test_2()
+    elif test_name == "3":
+        test_3()
     else:
         print(f"未知的测试名称: {test_name}")
         sys.exit(1)
