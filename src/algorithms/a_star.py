@@ -1,13 +1,11 @@
 from typing import List, Tuple, Optional, Dict, Set
 from src.models.grid import Grid
 from src.models.vehicle import Vehicle
-from src.models.constraints import ConstraintManager
 import heapq
 
 class AStarPlanner:
-    def __init__(self, grid: Grid, constraint_manager: ConstraintManager):
+    def __init__(self, grid: Grid):
         self.grid = grid
-        self.constraint_manager = constraint_manager
 
     @staticmethod
     def calculate_distance(pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
@@ -27,19 +25,14 @@ class AStarPlanner:
         """检查位置是否有效"""
         if not (0 <= position[0] < self.grid.width and 0 <= position[1] < self.grid.height):
             return False
-        return self.constraint_manager.check_all_constraints(self.grid, vehicle, position)
+        return True
 
     def get_valid_neighbors(self, position: Tuple[int, int], vehicle: Vehicle) -> List[Tuple[int, int]]:
         """获取有效的相邻位置"""
         neighbors = self.grid.get_neighbors(position[0], position[1], vehicle.is_empty())
         return [n for n in neighbors if self.is_valid_position(n, vehicle)]
 
-    def find_path(
-        self,
-        vehicle: Vehicle,
-        start: Tuple[int, int],
-        goal: Tuple[int, int]
-    ) -> Optional[List[Tuple[int, int]]]:
+    def find_path(self, vehicle: Vehicle, start: Tuple[int, int], goal: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
         """A*算法寻找路径"""
         open_set: List[Tuple[float, int, Tuple[int, int]]] = []
         closed_set: Set[Tuple[int, int]] = set()

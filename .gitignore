@@ -1,4 +1,6 @@
-*.png
-*.pyc
+**/*.png
+**/*.pyc
 .DS_Store
-__pycache__/
+**/__pycache__/
+test/output/
+output/
