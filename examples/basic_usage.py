@@ -14,6 +14,64 @@ sys.path.insert(0, project_root)
 from src import Grid, Vehicle, AStarPlanner, ConstraintManager, VEHICLE_TYPE_EMPTY, VEHICLE_TYPE_LOADED
 
 
+def example_0_json_map_loading():
+    """示例0：使用JSON格式加载地图"""
+    print("=" * 60)
+    print("示例0：使用JSON格式加载地图（推荐）")
+    print("=" * 60)
+    
+    # 创建一个简单的测试地图JSON
+    import json
+    json_map_path = os.path.join(project_root, "resource", "simple_map.json")
+    
+    # 如果JSON文件不存在，创建一个简单的示例
+    if not os.path.exists(json_map_path):
+        simple_map = {
+            "width": 5,
+            "height": 3,
+            "cells": [
+                {"x": 0, "y": 0, "type": "main_channel", "directions": ["up", "down", "left", "right"]},
+                {"x": 1, "y": 0, "type": "main_channel", "directions": ["up", "down", "left", "right"]},
+                {"x": 2, "y": 0, "type": "main_channel", "directions": ["up", "down", "left", "right"]},
+                {"x": 3, "y": 0, "type": "main_channel", "directions": ["up", "down", "left", "right"]},
+                {"x": 4, "y": 0, "type": "main_channel", "directions": ["up", "down", "left", "right"]},
+                {"x": 0, "y": 1, "type": "normal_channel", "directions": ["up", "down"]},
+                {"x": 1, "y": 1, "type": "normal_channel", "directions": ["up", "down"]},
+                {"x": 2, "y": 1, "type": "normal_channel", "directions": ["up", "down"]},
+                {"x": 3, "y": 1, "type": "normal_channel", "directions": ["up", "down"]},
+                {"x": 4, "y": 1, "type": "normal_channel", "directions": ["up", "down"]},
+                {"x": 0, "y": 2, "type": "interface", "directions": ["up", "down", "left", "right"]},
+                {"x": 4, "y": 2, "type": "interface", "directions": ["up", "down", "left", "right"]}
+            ],
+            "main_channel_rows": [0]
+        }
+        
+        os.makedirs(os.path.dirname(json_map_path), exist_ok=True)
+        with open(json_map_path, 'w', encoding='utf-8') as f:
+            json.dump(simple_map, f, indent=2, ensure_ascii=False)
+        print(f"✓ 创建示例JSON地图: {json_map_path}")
+    
+    # 使用JSON格式加载地图
+    grid = Grid(5, 3)
+    grid.load_map_from_json(json_map_path)
+    print(f"✓ 从JSON加载地图完成: 宽度={grid.width}, 高度={grid.height}")
+    print(f"✓ 主通道行: {grid.get_main_rows()}")
+    
+    # 测试路径规划
+    vehicle = Vehicle(id="V1", vehicle_type=VEHICLE_TYPE_EMPTY, current_position=(0, 2))
+    planner = AStarPlanner(grid)
+    path = planner.find_path(vehicle, (0, 2), (4, 2))
+    
+    if path:
+        print(f"✓ 找到路径，长度: {len(path)}")
+        print(f"  路径: {' -> '.join(str(p) for p in path)}")
+    else:
+        print("✗ 无法找到路径")
+    
+    print("✓ JSON格式优势：无需pandas依赖，格式清晰，易于版本控制")
+    print()
+
+
 def example_1_basic_path_planning():
     """示例1：基本路径规划"""
     print("=" * 60)
@@ -189,6 +247,7 @@ def main():
     print("=" * 60 + "\n")
     
     try:
+        example_0_json_map_loading()
         example_1_basic_path_planning()
         example_2_conflict_detection()
         example_3_loaded_vehicle()

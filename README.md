@@ -14,9 +14,11 @@
 ```python
 from src import Grid, Vehicle, AStarPlanner, VEHICLE_TYPE_EMPTY
 
-# 1. 创建地图
+# 1. 创建地图（推荐使用JSON格式）
 grid = Grid(10, 10)
-grid.load_map_from_xlsx("resource/test_map.xlsx")
+grid.load_map_from_json("resource/test_map.json")
+# 或使用Excel格式（需要pandas依赖）
+# grid.load_map_from_xlsx("resource/test_map.xlsx")
 
 # 2. 创建车辆
 vehicle = Vehicle(
@@ -103,6 +105,82 @@ Grid(width: int, height: int)
 - 每个单元格包含格子类型和允许方向
 - 格子类型：通道、巷道、接驳口、货位、禁用
 - 方向标识：上、下、左、右
+
+##### `load_map_from_json(path: str) -> None`
+
+从JSON文件加载地图配置。推荐使用此方法，相比Excel格式更清晰、易维护。
+
+**参数**：
+- `path` (str): JSON文件路径
+
+**JSON格式**：
+
+支持两种JSON格式，可根据需求选择：
+
+**格式A：cells数组格式**（适合稀疏地图，只定义非障碍格子）
+
+```json
+{
+  "width": 10,
+  "height": 10,
+  "cells": [
+    {
+      "x": 0,
+      "y": 0,
+      "type": "main_channel",
+      "directions": ["up", "down", "left", "right"]
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "type": "normal_channel",
+      "directions": ["left", "right"]
+    }
+  ],
+  "main_channel_rows": [0, 5]
+}
+```
+
+**格式B：grid二维数组格式**（适合密集地图，完整定义所有格子）
+
+```json
+{
+  "width": 10,
+  "height": 10,
+  "grid": [
+    [
+      {
+        "type": "main_channel",
+        "directions": ["up", "down", "left", "right"]
+      },
+      {
+        "type": "normal_channel",
+        "directions": ["left", "right"]
+      }
+    ]
+  ],
+  "main_channel_rows": [0, 5]
+}
+```
+
+**字段说明**：
+- `width` (int): 网格宽度（必需）
+- `height` (int): 网格高度（必需）
+- `cells` (array) 或 `grid` (2D array): 格子数据（二选一）
+  - `x` (int): x坐标（cells格式）
+  - `y` (int): y坐标（cells格式）
+  - `type` (string): 格子类型
+    - `"normal_channel"` - 普通通道
+    - `"main_channel"` - 主通道
+    - `"up_down_channel"` - 上下巷道
+    - `"obstacle"` - 障碍物
+    - `"interface"` - 接驳口
+  - `directions` (array): 允许的方向
+    - `"up"` - 上
+    - `"down"` - 下
+    - `"left"` - 左
+    - `"right"` - 右
+- `main_channel_rows` (array, 可选): 主通道所在的行号列表，不提供时自动检测
 
 ##### `get_neighbors(x: int, y: int, is_empty: bool) -> List[Tuple[int, int]]`
 
@@ -266,11 +344,52 @@ python examples/basic_usage.py
 
 运行后将依次展示【基本路径规划】【路径冲突检测】【负载车辆路径规划】【路径操作】四个示例，并在终端打印执行日志，便于对照理解。
 
-### 示例1：基本路径规划（单车）
+### 示例1：使用JSON格式加载地图
 
 ```python
 from src import Grid, Vehicle, AStarPlanner, VEHICLE_TYPE_EMPTY
 
+# 推荐：使用JSON格式加载地图
+grid = Grid(10, 10)
+grid.load_map_from_json("resource/test_map.json")
+
+vehicle = Vehicle(id="V1", vehicle_type=VEHICLE_TYPE_EMPTY, current_position=(8, 7))
+planner = AStarPlanner(grid)
+path = planner.find_path(vehicle, (8, 7), (3, 6))
+
+if path:
+    vehicle.set_full_planned_path(path)
+    print(f"路径长度: {len(path)}")
+```
+
+**JSON地图示例** (`test_map.json`):
+
+```json
+{
+  "width": 15,
+  "height": 10,
+  "cells": [
+    {"x": 0, "y": 0, "type": "main_channel", "directions": ["up", "down", "left", "right"]},
+    {"x": 1, "y": 0, "type": "main_channel", "directions": ["up", "down", "left", "right"]},
+    {"x": 2, "y": 0, "type": "normal_channel", "directions": ["up", "down"]},
+    {"x": 3, "y": 0, "type": "normal_channel", "directions": ["up", "down"]}
+  ],
+  "main_channel_rows": [0, 5]
+}
+```
+
+**输出说明**
+
+- 无需依赖 pandas/openpyxl
+- JSON格式更清晰易读，便于版本控制
+- 支持两种格式：cells数组（稀疏）或grid二维数组（密集）
+
+### 示例2：基本路径规划（使用Excel）
+
+```python
+from src import Grid, Vehicle, AStarPlanner, VEHICLE_TYPE_EMPTY
+
+# 使用Excel格式（向后兼容）
 grid = Grid(10, 10)
 grid.load_map_from_xlsx("resource/test_map.xlsx")
 
@@ -289,9 +408,9 @@ else:
 **输出说明**
 
 - 成功时打印路径长度与节点序列，可用于直接下发执行
-- 失败时会提示“无法找到路径”，需检查地图或目标点
+- 失败时会提示"无法找到路径"，需检查地图或目标点
 
-### 示例2：多车路径冲突检测
+### 示例3：多车路径冲突检测
 
 ```python
 from src import Grid, Vehicle, AStarPlanner, ConstraintManager, VEHICLE_TYPE_EMPTY
@@ -323,7 +442,7 @@ else:
 - `conflicts` 列表包含所有产生冲突的车辆 ID
 - 可以在收到冲突时触发自定义避让或重规划逻辑
 
-### 示例3：负载车辆方向锁定
+### 示例4：负载车辆方向锁定
 
 ```python
 from src import Grid, Vehicle, AStarPlanner, ConstraintManager, VEHICLE_TYPE_LOADED
@@ -348,7 +467,7 @@ if path:
 - 方向锁定只对主通道生效，并限制同一行的对向车进入
 - 适合高价值物料或高优先级任务，保障通行权
 
-### 示例4：路径操作与状态更新
+### 示例5：路径操作与状态更新
 
 ```python
 test_path = [(8, 7), (7, 7), (6, 7), (5, 7)]
@@ -416,14 +535,23 @@ route_plan/
 
 ## 依赖
 
-- Python >= 3.7
-- pandas >= 1.0.0（用于Excel地图加载）
-- openpyxl（用于Excel文件读取）
+### 核心依赖
 
-安装依赖：
+- Python >= 3.7
+
+### 可选依赖
+
+如果使用 Excel 格式地图（`load_map_from_xlsx`），需要安装：
+
+- pandas >= 1.0.0
+- openpyxl
+
+安装可选依赖：
 ```bash
 pip install pandas openpyxl
 ```
+
+**推荐**：使用 JSON 格式地图（`load_map_from_json`），无需额外依赖。
 
 ---
 

@@ -1,6 +1,7 @@
 from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
 import pandas as pd
+import json
 
 # 使用字典替代枚举
 DIRECTION_MAP = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}
@@ -174,6 +175,107 @@ class Grid:
                 # 统计主干道（main channel）所在的行，避免重复添加
                 if grid_type == GRID_TYPE_MAIN_CHANNEL and y not in self.main_channel_rows:
                     self.main_channel_rows.append(y)
+
+    def load_map_from_json(self, path: str) -> None:
+        """
+        从JSON文件加载地图配置
+        
+        支持两种JSON格式:
+        1. cells数组格式: {"width": 10, "height": 10, "cells": [...]}
+        2. grid二维数组格式: {"width": 10, "height": 10, "grid": [[...]]}
+        
+        Args:
+            path: JSON文件路径
+            
+        Raises:
+            FileNotFoundError: 文件不存在
+            ValueError: JSON格式错误或缺少必需字段
+        """
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"地图文件未找到: {path}")
+        except json.JSONDecodeError as e:
+            raise ValueError(f"JSON格式错误: {e}")
+        
+        # 提取基本信息
+        if 'width' not in data or 'height' not in data:
+            raise ValueError("JSON缺少必需字段: width 或 height")
+        
+        self.width = data['width']
+        self.height = data['height']
+        self.cells.clear()
+        
+        # 处理格子数据
+        if 'cells' in data:
+            # 使用cells数组格式
+            # 首先初始化所有格子为障碍物
+            for y in range(self.height):
+                for x in range(self.width):
+                    cell = GridCell(
+                        x=x,
+                        y=y,
+                        grid_type=GRID_TYPE_OBSTACLE,
+                        allowed_directions=[]
+                    )
+                    self.cells[(x, y)] = cell
+            
+            # 然后根据cells数组更新格子
+            for cell_data in data['cells']:
+                x = cell_data.get('x')
+                y = cell_data.get('y')
+                grid_type = cell_data.get('type', GRID_TYPE_OBSTACLE)
+                allowed_directions = cell_data.get('directions', [])
+                
+                if x is None or y is None:
+                    continue
+                
+                cell = GridCell(
+                    x=x,
+                    y=y,
+                    grid_type=grid_type,
+                    allowed_directions=allowed_directions
+                )
+                self.cells[(x, y)] = cell
+                
+        elif 'grid' in data:
+            # 使用grid二维数组格式
+            grid_data = data['grid']
+            for y in range(self.height):
+                for x in range(self.width):
+                    if y < len(grid_data) and x < len(grid_data[y]):
+                        cell_data = grid_data[y][x]
+                        grid_type = cell_data.get('type', GRID_TYPE_OBSTACLE)
+                        allowed_directions = cell_data.get('directions', [])
+                    else:
+                        # 默认障碍物
+                        grid_type = GRID_TYPE_OBSTACLE
+                        allowed_directions = []
+                    
+                    cell = GridCell(
+                        x=x,
+                        y=y,
+                        grid_type=grid_type,
+                        allowed_directions=allowed_directions
+                    )
+                    self.cells[(x, y)] = cell
+        else:
+            raise ValueError("JSON缺少必需字段: cells 或 grid")
+        
+        # 处理主通道行信息
+        if 'main_channel_rows' in data:
+            self.main_channel_rows = data['main_channel_rows']
+        else:
+            # 自动检测主通道行
+            self.main_channel_rows = []
+            for y in range(self.height):
+                for x in range(self.width):
+                    if (x, y) in self.cells:
+                        if self.cells[(x, y)].grid_type == GRID_TYPE_MAIN_CHANNEL:
+                            if y not in self.main_channel_rows:
+                                self.main_channel_rows.append(y)
+                            break
 
     def get_main_rows(self) -> List[int]:
         return self.main_channel_rows
