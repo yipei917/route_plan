@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 项目特定
+*.md
+!README.md
+.git/
+.gitignore
+images/
+专利.md
+专利.pdf
+
+# 测试和示例
+examples/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 临时文件
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
