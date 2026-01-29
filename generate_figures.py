@@ -41,8 +41,8 @@ def create_grid_base(ax, width, height):
     for y in range(height + 1):
         ax.plot([-0.5, width - 0.5], [y - 0.5, y - 0.5], 'k-', linewidth=0.5, alpha=0.3)
 
-def draw_cell(ax, x, y, cell_type='normal', locked=False, direction_lock=None, has_cargo=False):
-    """绘制单个格子"""
+def draw_cell(ax, x, y, cell_type='normal', locked=False, direction_lock=None, has_cargo=False, lock_color=None):
+    """绘制单个格子。lock_color 为 None 时使用 COLOR_LOCKED（红色），可指定以区分不同车的锁定。"""
     # 颜色选择
     if cell_type == 'main':
         color = COLOR_MAIN_CHANNEL
@@ -69,10 +69,11 @@ def draw_cell(ax, x, y, cell_type='normal', locked=False, direction_lock=None, h
     
     # 锁定边框
     if locked:
+        ec = lock_color if lock_color is not None else COLOR_LOCKED
         rect_lock = patches.Rectangle(
             (x - 0.5, y - 0.5), 1, 1,
             fill=False,
-            edgecolor=COLOR_LOCKED,
+            edgecolor=ec,
             linewidth=3,
             linestyle='-'
         )
@@ -203,8 +204,8 @@ def figure0_map_demo():
             bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
 
     # 障碍物：(5,4)到(6,4)
-    for x in [5, 6]:
-        draw_cell(ax, x, 4, cell_type='obstacle')
+    for x, y in [(5, 4), (6, 4)]:
+        draw_cell(ax, x, y, cell_type='obstacle')
     ax.text(5.5, 4.2, '障碍物', ha='center', va='bottom',
             fontsize=12, weight='bold',
             bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
@@ -267,240 +268,83 @@ def figure0_map_demo():
     plt.close()
 
 def figure1_segmented_locking():
-    """图1：分段路径锁定策略示意图 - 四宫格布局"""
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(20, 16))
-    width, height = 10, 6
-    main_channel_row = 4  # 第4行是主通道
+    """图1：分段路径锁定策略示意图 - 每行5张图，输出每一步移动"""
+    width, height = 8, 5
+    main_channel_row = 3  # 主通道索引为3（第4行）
     
-    # 定义完整路径：从(7,4)到(2,4)再到(2,1)
-    full_path_main = [(7, 4), (6, 4), (5, 4), (4, 4), (3, 4), (2, 4)]
-    full_path_sub = [(2, 4), (2, 3), (2, 2), (2, 1), (2, 0)]
-    full_path = full_path_main + full_path_sub[1:]  # 完整路径，去掉重复的(2,4)
-    
-    # ========== 左上：主通道滚动锁定 - 初始状态 ==========
-    create_grid_base(ax1, width, height)
-    
-    # 创建地图：第4行是主通道，其他是子通道
-    for y in range(height):
-        for x in range(width):
-            if y == main_channel_row:
-                draw_cell(ax1, x, y, cell_type='main')
-            else:
-                draw_cell(ax1, x, y, cell_type='normal')
-    
-    # 标记完整路径（淡色显示，使用车辆颜色）
-    main_path_seg = [(7, 4), (6, 4), (5, 4), (4, 4), (3, 4), (2, 4)]
-    draw_path(ax1, main_path_seg, color=COLOR_VEHICLE_1, linewidth=3)
-    transition_path = [(2, 4), (2, 3), (2, 2), (2, 1), (2, 0)]
-    draw_path(ax1, transition_path, color=COLOR_VEHICLE_1, linewidth=3)
-    
-    # 在(2,0)放置货物
-    cargo_circle1 = patches.Circle((2, 0), 0.25,
-                                   facecolor=COLOR_CARGO,
-                                   edgecolor='darkgreen',
-                                   linewidth=1.5,
-                                   alpha=0.7,
-                                   zorder=6)
-    ax1.add_patch(cargo_circle1)
-    
-    # 主通道路径（从(7,4)开始）- 当前阶段高亮
-    main_path = [(7, 4), (6, 4), (5, 4), (4, 4), (3, 4)]
-    draw_path(ax1, main_path, color=COLOR_VEHICLE_1, linewidth=3)
-    
-    # 锁定前3个主通道格子
-    locked_cells = [(7, 4), (6, 4), (5, 4)]
-    for x, y in locked_cells:
-        draw_cell(ax1, x, y, cell_type='main', locked=True)
-    
-    # 车辆
-    draw_vehicle(ax1, 7, 4, 'V1', is_loaded=False)
-    
-    # 标注
-    ax1.text(5, 4.5, '锁定范围：前3个主通道格子', ha='center', va='bottom',
-           fontsize=12, weight='bold', color=COLOR_LOCKED,
-           bbox=dict(boxstyle='round,pad=0.4', facecolor='yellow', alpha=0.7))
-    
-    ax1.text(5, 2, '主通道滚动锁定', ha='center', va='center',
-           fontsize=12, weight='bold',
-           bbox=dict(boxstyle='round,pad=0.4', facecolor='lightblue', alpha=0.8))
-    
-    # 左上图例
-    legend_elements1 = [
-        patches.Patch(facecolor=COLOR_MAIN_CHANNEL, alpha=0.8, label='主通道'),
-        patches.Patch(facecolor=COLOR_NORMAL_CHANNEL, alpha=0.6, label='子通道'),
-        patches.Patch(facecolor='none', edgecolor=COLOR_LOCKED, linewidth=3, label='锁定格子'),
-        patches.Circle((0, 0), 0.1, facecolor=COLOR_CARGO, edgecolor='darkgreen', label='货物'),
+    # 每一步：(车辆x, 车辆y, 是否负载, 主通道锁定列表, 是否子通道全程锁定)
+    # 小车从(6,3)开始在主通道 -> (1,3) -> 子通道(1,0)取货 -> 返回(1,3)
+    steps = [
+        ((6, 3), False, [(6, 3), (5, 3), (4, 3)], False),   # 0 起点，主通道滚动锁定
+        ((5, 3), False, [(5, 3), (4, 3), (3, 3)], False),   # 1
+        ((4, 3), False, [(4, 3), (3, 3), (2, 3)], False),   # 2
+        ((3, 3), False, [(3, 3), (2, 3), (1, 3)], False),   # 3
+        ((2, 3), False, [(2, 3), (1, 3)], False),           # 4
+        ((1, 3), False, [], True),   # 5 进入子通道入口，子通道全程锁定
+        ((1, 2), False, [], True),   # 6
+        ((1, 1), False, [], True),   # 7
+        ((1, 0), True, [], True),    # 8 到达取货，负载（取货后货物不显示）
+        ((1, 1), True, [], True),    # 9 返回主通道
+        ((1, 2), True, [], True),    # 10
+        ((1, 3), True, [(1, 3)], False),    # 11
     ]
-    ax1.legend(handles=legend_elements1, loc='upper right', fontsize=14, framealpha=0.9)
-    
-    # ========== 右上：主通道滚动锁定 - 移动后 ==========
-    create_grid_base(ax2, width, height)
-    
-    # 创建地图：第4行是主通道，其他是子通道
-    for y in range(height):
-        for x in range(width):
-            if y == main_channel_row:
-                draw_cell(ax2, x, y, cell_type='main')
+    n_steps = len(steps)
+    n_cols = 4  # 每行四张图
+    n_rows = (n_steps + n_cols - 1) // n_cols
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows))
+    if n_rows == 1:
+        axes = axes.reshape(1, -1)
+    for idx in range(n_cols * n_rows):
+        row, col = idx // n_cols, idx % n_cols
+        ax = axes[row, col]
+        if idx >= n_steps:
+            ax.axis('off')
+            continue
+        (vx, vy), is_loaded, locked_main, lock_sub = steps[idx]
+        create_grid_base(ax, width, height)
+        for y in range(height):
+            for x in range(width):
+                if y == main_channel_row:
+                    draw_cell(ax, x, y, cell_type='main')
+                else:
+                    draw_cell(ax, x, y, cell_type='normal')
+        # 只画尚未走过的路径（走过后什么都不画）
+        full_path = [(6, 3), (5, 3), (4, 3), (3, 3), (2, 3), (1, 3), (1, 2), (1, 1), (1, 0), (1, 1), (1, 2), (1, 3)]
+        remaining = full_path[idx:]
+        if len(remaining) >= 2:
+            # 返回段 (1,0)->(1,3) 用虚线
+            if (1, 0) in remaining:
+                j = remaining.index((1, 0))
+                draw_path(ax, remaining[: j + 1], color=COLOR_VEHICLE_1, linewidth=2, alpha=0.35)
+                if j + 1 < len(remaining):
+                    draw_path(ax, remaining[j:], color=COLOR_VEHICLE_1, linewidth=2, linestyle='--', alpha=0.35)
             else:
-                draw_cell(ax2, x, y, cell_type='normal')
-    
-    # 标记完整路径（淡色显示，使用车辆颜色）
-    main_path_seg2 = [(7, 4), (6, 4), (5, 4), (4, 4), (3, 4), (2, 4)]
-    draw_path(ax2, main_path_seg2, color=COLOR_VEHICLE_1, linewidth=3)
-    transition_path2 = [(2, 4), (2, 3), (2, 2), (2, 1), (2, 0)]
-    draw_path(ax2, transition_path2, color=COLOR_VEHICLE_1, linewidth=3)
-    
-    # 在(2,0)放置货物
-    cargo_circle2 = patches.Circle((2, 0), 0.25,
-                                   facecolor=COLOR_CARGO,
-                                   edgecolor='darkgreen',
-                                   linewidth=1.5,
-                                   alpha=0.7,
-                                   zorder=6)
-    ax2.add_patch(cargo_circle2)
-    
-    # 主通道路径（车辆移动后）- 当前阶段高亮
-    main_path2 = [(6, 4), (5, 4), (4, 4), (3, 4), (2, 4)]
-    draw_path(ax2, main_path2, color=COLOR_VEHICLE_1, linewidth=3)
-    
-    # 锁定范围滚动：前3个主通道格子
-    locked_cells2 = [(6, 4), (5, 4), (4, 4)]
-    for x, y in locked_cells2:
-        draw_cell(ax2, x, y, cell_type='main', locked=True)
-    
-    # 车辆
-    draw_vehicle(ax2, 6, 4, 'V1', is_loaded=False)
-    
-    # 标注
-    ax2.text(4, 4.5, '锁定范围滚动', ha='center', va='bottom',
-           fontsize=12, weight='bold', color=COLOR_LOCKED,
-           bbox=dict(boxstyle='round,pad=0.4', facecolor='yellow', alpha=0.7))
-    
-    ax2.text(5, 2, '主通道滚动锁定', ha='center', va='center',
-           fontsize=12, weight='bold',
-           bbox=dict(boxstyle='round,pad=0.4', facecolor='lightblue', alpha=0.8))
-    
-    # 右上图例
-    legend_elements2 = [
-        patches.Patch(facecolor=COLOR_MAIN_CHANNEL, alpha=0.8, label='主通道'),
-        patches.Patch(facecolor=COLOR_NORMAL_CHANNEL, alpha=0.6, label='子通道'),
-        patches.Patch(facecolor='none', edgecolor=COLOR_LOCKED, linewidth=3, label='锁定格子'),
-        patches.Circle((0, 0), 0.1, facecolor=COLOR_CARGO, edgecolor='darkgreen', label='货物'),
-    ]
-    ax2.legend(handles=legend_elements2, loc='upper right', fontsize=14, framealpha=0.9)
-    
-    # ========== 左下：子通道全程锁定 - 进入子通道 ==========
-    create_grid_base(ax3, width, height)
-    
-    # 创建地图：第4行是主通道，其他是子通道
-    for y in range(height):
-        for x in range(width):
-            if y == main_channel_row:
-                draw_cell(ax3, x, y, cell_type='main')
-            else:
-                draw_cell(ax3, x, y, cell_type='normal')
-    
-    # 完整路径：从(7,4)到(2,4)再到(2,0)
-    # 主通道段
-    main_path_seg = [(7, 4), (6, 4), (5, 4), (4, 4), (3, 4), (2, 4)]
-    draw_path(ax3, main_path_seg, color=COLOR_VEHICLE_1, linewidth=3)
-    
-    # 从主通道到子通道的过渡
-    transition_path = [(2, 4), (2, 3), (2, 2), (2, 1), (2, 0)]
-    draw_path(ax3, transition_path, color=COLOR_VEHICLE_1, linewidth=3)
-    
-    # 子通道全程锁定（从主通道到目标点的子通道段）
-    locked_sub_cells = [(2, 4), (2, 3), (2, 2), (2, 1), (2, 0)]
-    for x, y in locked_sub_cells:
-        if y != main_channel_row:  # 只锁定子通道部分
-            draw_cell(ax3, x, y, cell_type='normal', locked=True)
-    
-    # 车辆
-    draw_vehicle(ax3, 2, 2, 'V1', is_loaded=False)
-    
-    # 在(2,0)放置货物
-    cargo_circle3 = patches.Circle((2, 0), 0.25,
-                                   facecolor=COLOR_CARGO,
-                                   edgecolor='darkgreen',
-                                   linewidth=1.5,
-                                   alpha=0.7,
-                                   zorder=6)
-    ax3.add_patch(cargo_circle3)
-    
-    # 标注
-    ax3.text(2, 0.5, '子通道全程锁定', ha='center', va='top',
-           fontsize=12, weight='bold', color=COLOR_VEHICLE_1,
-           bbox=dict(boxstyle='round,pad=0.4', facecolor='lightgreen', alpha=0.7))
-    
-    ax3.text(5, 5, '子通道全程锁定', ha='center', va='center',
-           fontsize=12, weight='bold',
-           bbox=dict(boxstyle='round,pad=0.4', facecolor='lightgreen', alpha=0.8))
-    
-    # 左下图例
-    legend_elements3 = [
-        patches.Patch(facecolor=COLOR_MAIN_CHANNEL, alpha=0.8, label='主通道'),
-        patches.Patch(facecolor=COLOR_NORMAL_CHANNEL, alpha=0.6, label='子通道'),
-        patches.Patch(facecolor='none', edgecolor=COLOR_LOCKED, linewidth=3, label='锁定格子'),
-        patches.Circle((0, 0), 0.1, facecolor=COLOR_CARGO, edgecolor='darkgreen', label='货物'),
-    ]
-    ax3.legend(handles=legend_elements3, loc='upper right', fontsize=14, framealpha=0.9)
-    
-    # ========== 右下：子通道全程锁定 - 到达目标 ==========
-    create_grid_base(ax4, width, height)
-    
-    # 创建地图：第4行是主通道，其他是子通道
-    for y in range(height):
-        for x in range(width):
-            if y == main_channel_row:
-                draw_cell(ax4, x, y, cell_type='main')
-            else:
-                draw_cell(ax4, x, y, cell_type='normal')
-    
-    # 完整路径：从(7,4)到(2,4)再到(2,0)
-    # 主通道段
-    main_path_seg2 = [(7, 4), (6, 4), (5, 4), (4, 4), (3, 4), (2, 4)]
-    draw_path(ax4, main_path_seg2, color=COLOR_VEHICLE_1, linewidth=3)
-    
-    # 从主通道到子通道的过渡
-    transition_path2 = [(2, 4), (2, 3), (2, 2), (2, 1), (2, 0)]
-    draw_path(ax4, transition_path2, color=COLOR_VEHICLE_1, linewidth=3)
-    
-    # 子通道全程锁定（从主通道到目标点的子通道段）
-    locked_sub_cells2 = [(2, 4), (2, 3), (2, 2), (2, 1), (2, 0)]
-    for x, y in locked_sub_cells2:
-        if y != main_channel_row:  # 只锁定子通道部分
-            draw_cell(ax4, x, y, cell_type='normal', locked=True)
-    
-    # 车辆
-    draw_vehicle(ax4, 2, 0, 'V1', is_loaded=False)
-    
-    # 在(2,0)放置圆形货物
-    cargo_circle4 = patches.Circle((2, 0), 0.25,
-                                   facecolor=COLOR_CARGO,
-                                   edgecolor='darkgreen',
-                                   linewidth=1.5,
-                                   alpha=0.7,
-                                   zorder=6)
-    ax4.add_patch(cargo_circle4)
-    
-    # 标注
-    ax4.text(2, 0.5, '子通道全程锁定', ha='center', va='top',
-           fontsize=12, weight='bold', color=COLOR_VEHICLE_1,
-           bbox=dict(boxstyle='round,pad=0.4', facecolor='lightgreen', alpha=0.7))
-    
-    ax4.text(5, 5, '子通道全程锁定', ha='center', va='center',
-           fontsize=12, weight='bold',
-           bbox=dict(boxstyle='round,pad=0.4', facecolor='lightgreen', alpha=0.8))
-    
-    # 右下图例
-    legend_elements4 = [
-        patches.Patch(facecolor=COLOR_MAIN_CHANNEL, alpha=0.8, label='主通道'),
-        patches.Patch(facecolor=COLOR_NORMAL_CHANNEL, alpha=0.6, label='子通道'),
-        patches.Patch(facecolor='none', edgecolor=COLOR_LOCKED, linewidth=3, label='锁定格子'),
-        patches.Circle((0, 0), 0.1, facecolor=COLOR_CARGO, edgecolor='darkgreen', label='货物'),
-    ]
-    ax4.legend(handles=legend_elements4, loc='upper right', fontsize=14, framealpha=0.9)
-    
+                draw_path(ax, remaining, color=COLOR_VEHICLE_1, linewidth=2, linestyle='--', alpha=0.35)
+        # 锁定
+        for (lx, ly) in locked_main:
+            draw_cell(ax, lx, ly, cell_type='main', locked=True)
+        if lock_sub:
+            for y in range(height - 1):
+                if y == main_channel_row:
+                    draw_cell(ax, 1, y, cell_type='main', locked=True)
+                else:
+                    draw_cell(ax, 1, y, cell_type='normal', locked=True)
+        # 货物：取货后（已负载）不显示
+        if not is_loaded:
+            cargo_circle = patches.Circle((1, 0), 0.25, facecolor=COLOR_CARGO, edgecolor='darkgreen',
+                                          linewidth=1.5, alpha=0.7, zorder=6)
+            ax.add_patch(cargo_circle)
+        # 车辆
+        draw_vehicle(ax, vx, vy, 'V1', is_loaded=is_loaded)
+        # 图例放右上角（仅第一格）
+        if idx == 3:
+            legend_elements = [
+                patches.Patch(facecolor=COLOR_MAIN_CHANNEL, alpha=0.8, label='主通道'),
+                patches.Patch(facecolor=COLOR_NORMAL_CHANNEL, alpha=0.6, label='子通道'),
+                patches.Patch(facecolor='none', edgecolor=COLOR_LOCKED, linewidth=3, label='锁定格子'),
+                patches.Circle((0, 0), 0.1, facecolor=COLOR_CARGO, edgecolor='darkgreen', label='货物'),
+            ]
+            ax.legend(handles=legend_elements, loc='upper right', fontsize=12, framealpha=0.9)
     plt.tight_layout()
     filename = 'figure1_segmented_locking.png'
     plt.savefig(filename, dpi=300, bbox_inches='tight', facecolor='white')
@@ -508,73 +352,122 @@ def figure1_segmented_locking():
     plt.close()
 
 def figure2_smart_avoidance():
-    """图2：智能避让策略示意图"""
-    fig, ax = plt.subplots(figsize=(16, 8))
-    create_grid_base(ax, 15, 10)
-    
-    # 创建主通道（y=7）
-    for x in range(15):
-        draw_cell(ax, x, 7, cell_type='main')
-    
-    # 创建其他主通道行（y=5, y=9）
-    for x in range(15):
-        draw_cell(ax, x, 5, cell_type='main')
-        draw_cell(ax, x, 9, cell_type='main')
-    
-    # 车辆V1（空载，在(6,7)）
-    draw_vehicle(ax, 6, 7, 'V1', is_loaded=False, status='idle')
-    
-    # 车辆V2（负载，在(12,7)）
-    draw_vehicle(ax, 12, 7, 'V2', is_loaded=True, status='deliver')
-    
-    # V2的规划路径
-    v2_path = [(12, 7), (11, 7), (10, 7), (9, 7), (8, 7), (7, 7)]
-    draw_path(ax, v2_path, color=COLOR_VEHICLE_2, linewidth=3)
-    
-    # 冲突区域（黄色高亮）
-    conflict_rect = patches.Rectangle((6 - 0.5, 7 - 0.5), 2, 1,
-                                     facecolor=COLOR_CONFLICT, alpha=0.4, zorder=1)
-    ax.add_patch(conflict_rect)
-    ax.text(7, 7, '冲突区域', ha='center', va='center',
-           fontsize=12, weight='bold', color='black',
-           bbox=dict(boxstyle='round,pad=0.3', facecolor=COLOR_CONFLICT, alpha=0.8))
-    
-    # V1的避让路径（虚线）
-    avoid_path = [(6, 7), (6, 6), (6, 5)]
-    draw_path(ax, avoid_path, color=COLOR_AVOID_PATH, linewidth=2, linestyle='--')
-    
-    # 避让位置标注
-    draw_vehicle(ax, 6, 5, 'V1', is_loaded=False, status='avoiding')
-    ax.text(6, 4.5, '避让位置', ha='center', va='top',
-           fontsize=10, color='blue', weight='bold',
-           bbox=dict(boxstyle='round,pad=0.3', facecolor='lightblue', alpha=0.8))
-    
-    # 决策规则标注
-    ax.text(9, 9, '决策规则：\n负载车优先\n空载车避让', ha='center', va='center',
-           fontsize=12, weight='bold',
-           bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', alpha=0.8))
-    
-    # 箭头：V1给V2让路
-    arrow = FancyArrowPatch((6, 7.5), (12, 7.5),
-                           arrowstyle='->', mutation_scale=20,
-                           color='red', linewidth=2)
-    ax.add_patch(arrow)
-    ax.text(9, 8, 'V1给V2让路', ha='center', va='bottom',
-           fontsize=12, weight='bold', color='red')
-    
-    # 图例
-    legend_elements = [
-        patches.Patch(facecolor=COLOR_VEHICLE_1, label='空载车辆'),
-        patches.Patch(facecolor=COLOR_VEHICLE_2, label='负载车辆'),
-        plt.Line2D([0], [0], color=COLOR_VEHICLE_2, linewidth=3, label='负载车路径'),
-        plt.Line2D([0], [0], color=COLOR_AVOID_PATH, linewidth=2, linestyle='--', label='避让路径'),
-        patches.Patch(facecolor=COLOR_CONFLICT, alpha=0.4, label='冲突区域'),
-    ]
-    ax.legend(handles=legend_elements, loc='upper right', fontsize=14, framealpha=0.9)
-    
-    ax.set_title('图2. 基于负载状态的智能避让策略\n（负载车优先，空载车避让）', 
-                fontsize=14, weight='bold', pad=20)
-    
+    """图2：长9宽6，主通道第1、4行。负载V1从(7,4)到(0,4)；空车V2从(1,4)到(6,3)。仅(5,3)有货物。两车动一步后在(4,4)冲突，V2避让到(2,1)。"""
+    width, height = 9, 6
+    main_channel_rows = [1, 4]
+
+    # V1 目的地 (0,4)，每次锁定三格
+    # V1：第三张再往前一格到(5,4)，之后一直等待；再往后继续到(0,4)
+    full_path = [(7, 4), (6, 4), (5, 4), (5, 4), (5, 4), (4, 4), (3, 4), (2, 4), (1, 4), (0, 4)]
+    # V2：前两张(1,4)->(2,4)；第三到第五张第二条路径(2,4)->(2,1)避让全程锁定；之后第三条路径
+    v2_positions = [(1, 4), (2, 4), (2, 4), (2, 3), (2, 2), (2, 1), (3, 1), (4, 1), (5, 1), (5, 2)]
+    v2_path_to_53 = [(1, 4), (2, 4), (3, 4), (4, 4), (5, 4), (5, 3)]  # V2 第一条路径：(1,4)到(5,3)，仅前两张图
+    v2_path_2_avoid = [(2, 4), (2, 3), (2, 2), (2, 1)]  # V2 第二条路径：(2,4)到(2,1)，第三到第五张，全程锁定
+    v2_path_3 = [(2, 1), (3, 1), (4, 1), (5, 1), (5, 2), (5, 3)]  # V2 第三条路径，idx>=5 时用
+    v2_full_path = [(1, 4), (2, 4), (2, 3), (2, 2), (2, 1)]
+    v2_avoid_path = [(2, 4), (2, 3), (2, 2), (2, 1)]
+    conflict_cell = (4, 4)
+    n_steps = len(full_path)
+    n_cols = 4
+    n_rows = (n_steps + n_cols - 1) // n_cols
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows))
+    if n_rows == 1:
+        axes = axes.reshape(1, -1)
+    for idx in range(n_cols * n_rows):
+        row, col = idx // n_cols, idx % n_cols
+        ax = axes[row, col]
+        if idx >= n_steps:
+            ax.axis('off')
+            continue
+        (vx, vy) = full_path[idx]
+        (v2x, v2y) = v2_positions[idx]
+        create_grid_base(ax, width, height)
+        for y in range(height):
+            for x in range(width):
+                if y in main_channel_rows:
+                    draw_cell(ax, x, y, cell_type='main')
+                else:
+                    draw_cell(ax, x, y, cell_type='normal')
+        # 仅 (5,3) 有货物
+        cargo_circle = patches.Circle((5, 3), 0.25, facecolor=COLOR_CARGO, edgecolor='darkgreen',
+                                      linewidth=1.5, alpha=0.7, zorder=6)
+        ax.add_patch(cargo_circle)
+        # 冲突格 (4,4)：仅第二张图标出，框黄色、字样加大
+        if idx == 1:
+            conflict_rect = patches.Rectangle((4 - 0.5, 4 - 0.5), 1, 1,
+                                              facecolor=COLOR_CONFLICT, alpha=0.4, edgecolor='gold',
+                                              linewidth=3, zorder=1)
+            ax.add_patch(conflict_rect)
+            ax.text(4, 4, '冲突', ha='center', va='center', fontsize=16, weight='bold',
+                    bbox=dict(boxstyle='round,pad=0.2', facecolor=COLOR_CONFLICT, alpha=0.8))
+        # V2 路径：前两张第一条(1,4)->(5,3)；第三到第五张第二条(2,4)->(2,1)避让；之后第三条
+        if idx <= 1:
+            remaining_v2 = v2_path_to_53[v2_path_to_53.index((v2x, v2y)):]
+            if len(remaining_v2) >= 2:
+                draw_path(ax, remaining_v2, color=COLOR_VEHICLE_2, linewidth=2, alpha=0.35)
+        elif idx <= 4:
+            # 第三到第五张：第二条路径 (2,4)到(2,1)
+            try:
+                i = v2_path_2_avoid.index((v2x, v2y))
+                remaining_avoid = v2_path_2_avoid[i:]
+                if len(remaining_avoid) >= 2:
+                    draw_path(ax, remaining_avoid, color=COLOR_AVOID_PATH, linewidth=2, linestyle='--', alpha=0.35)
+            except ValueError:
+                pass
+        elif idx >= 5:
+            # 第六到第十张：V2 第三条路径 (2,1)到(5,3)
+            remaining_v2_3 = v2_path_3[v2_path_3.index((v2x, v2y)):]
+            if len(remaining_v2_3) >= 2:
+                draw_path(ax, remaining_v2_3, color=COLOR_VEHICLE_2, linewidth=2, alpha=0.35)
+        # V1 锁定：第三、四、五张与第五张一致，均为 (3,4)(4,4)(5,4)；其余为当前及后续两格
+        if idx in (2, 3, 4):
+            locked = [(3, 4), (4, 4), (5, 4)]
+        else:
+            locked = full_path[idx : idx + 3]
+        for (lx, ly) in locked:
+            if ly in main_channel_rows:
+                draw_cell(ax, lx, ly, cell_type='main', locked=True)
+            else:
+                draw_cell(ax, lx, ly, cell_type='normal', locked=True)
+        # V2 锁定：前两张三格；第三到第五张第二条路径全程锁定；图8为(4,1)(5,1)；图10与图9一致；其余三格
+        try:
+            if idx <= 1:
+                j = v2_path_to_53.index((v2x, v2y))
+                v2_locked = v2_path_to_53[j : j + 3]
+            elif idx <= 4:
+                v2_locked = v2_path_2_avoid
+            elif idx == 7:
+                # 图8：V2 锁定 (4,1)(5,1)
+                v2_locked = [(4, 1), (5, 1)]
+            elif idx == 9:
+                # 图10：与图9一致，(5,1)(5,2)(5,3)
+                v2_locked = [(5, 1), (5, 2), (5, 3)]
+            else:
+                j = v2_path_3.index((v2x, v2y))
+                v2_locked = v2_path_3[j : j + 3]
+            for (lx, ly) in v2_locked:
+                if ly in main_channel_rows:
+                    draw_cell(ax, lx, ly, cell_type='main', locked=True, lock_color=COLOR_VEHICLE_2)
+                else:
+                    draw_cell(ax, lx, ly, cell_type='normal', locked=True, lock_color=COLOR_VEHICLE_2)
+        except ValueError:
+            pass
+        # V1 尚未走过的路径
+        remaining = full_path[idx:]
+        if len(remaining) >= 2:
+            draw_path(ax, remaining, color=COLOR_VEHICLE_1, linewidth=2, alpha=0.35)
+        draw_vehicle(ax, vx, vy, 'V1', is_loaded=True)
+        draw_vehicle(ax, v2x, v2y, 'V2', is_loaded=False)
+        if idx == 3:
+            legend_elements = [
+                patches.Patch(facecolor=COLOR_MAIN_CHANNEL, alpha=0.8, label='主通道'),
+                patches.Patch(facecolor=COLOR_NORMAL_CHANNEL, alpha=0.6, label='子通道'),
+                patches.Circle((0, 0), 0.1, facecolor=COLOR_CARGO, edgecolor='darkgreen', label='货物'),
+                patches.Patch(facecolor='none', edgecolor=COLOR_LOCKED, linewidth=3, label='锁定格子'),
+                patches.Patch(facecolor=COLOR_CONFLICT, alpha=0.4, label='冲突'),
+                plt.Line2D([0], [0], color=COLOR_AVOID_PATH, linewidth=2, linestyle='--', label='避让路径'),
+            ]
+            ax.legend(handles=legend_elements, loc='upper right', fontsize=10, framealpha=0.9)
     plt.tight_layout()
     filename = 'figure2_smart_avoidance.png'
     plt.savefig(filename, dpi=300, bbox_inches='tight', facecolor='white')
@@ -582,72 +475,150 @@ def figure2_smart_avoidance():
     plt.close()
 
 def figure3_direction_lock():
-    """图3：动态方向锁定机制示意图"""
-    fig, ax = plt.subplots(figsize=(18, 8))
-    create_grid_base(ax, 18, 10)
-    
-    # 创建主通道（y=7）
-    for x in range(18):
-        draw_cell(ax, x, 7, cell_type='main')
-    
-    # V1（负载，向左行驶）
-    draw_vehicle(ax, 15, 7, 'V1', is_loaded=True, status='deliver')
-    
-    # V1的路径
-    v1_path = [(15, 7), (14, 7), (13, 7), (12, 7), (11, 7), (10, 7), (9, 7), (8, 7)]
-    draw_path(ax, v1_path, color=COLOR_VEHICLE_2, linewidth=3)
-    
-    # 方向锁定（向左箭头）
-    locked_positions = [(15, 7), (14, 7), (13, 7), (12, 7), (11, 7), (10, 7), (9, 7), (8, 7)]
-    for x, y in locked_positions:
-        draw_cell(ax, x, y, cell_type='main', locked=True, direction_lock='left')
-    
-    # V2（空载，尝试向右行驶）
-    draw_vehicle(ax, 3, 7, 'V2', is_loaded=False, status='idle')
-    
-    # V2尝试的路径（被阻止）
-    v2_attempt_path = [(3, 7), (4, 7), (5, 7), (6, 7), (7, 7), (8, 7), (9, 7), (10, 7)]
-    draw_path(ax, v2_attempt_path, color='gray', linewidth=2, linestyle=':', alpha=0.5)
-    
-    # 标注被阻止的路径段
-    blocked_positions = [(8, 7), (9, 7), (10, 7)]
-    for x, y in blocked_positions:
-        ax.text(x, y + 0.4, '✗', ha='center', va='center',
-               fontsize=20, color='red', weight='bold')
-        ax.text(x, y - 0.4, 'X', ha='center', va='center',
-               fontsize=16, color='red', weight='bold',
-               bbox=dict(boxstyle='round,pad=0.2', facecolor='yellow', alpha=0.8))
-    
-    # 对比说明
-    # 左侧：无方向锁的情况（死锁风险）
-    ax.text(4.5, 5, '无方向锁：\n死锁风险', ha='center', va='center',
-           fontsize=12, weight='bold',
-           bbox=dict(boxstyle='round,pad=0.5', facecolor='red', alpha=0.3))
-    
-    # 右侧：有方向锁的情况（死锁已预防）
-    ax.text(13.5, 5, '有方向锁：\n死锁已预防', ha='center', va='center',
-           fontsize=12, weight='bold',
-           bbox=dict(boxstyle='round,pad=0.5', facecolor='green', alpha=0.3))
-    
-    # 说明文字
-    ax.text(9, 8.5, '负载车V1建立向左方向锁，阻止对向车辆V2进入', 
-           ha='center', va='center',
-           fontsize=12, weight='bold',
-           bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', alpha=0.8))
-    
-    # 图例
-    legend_elements = [
-        patches.Patch(facecolor=COLOR_VEHICLE_2, label='负载车辆'),
-        patches.Patch(facecolor=COLOR_VEHICLE_1, label='空载车辆'),
-        patches.Patch(facecolor='none', edgecolor=COLOR_LOCKED, linewidth=3, label='方向锁定'),
-        plt.Line2D([0], [0], color=COLOR_VEHICLE_2, linewidth=3, label='负载车路径'),
-        plt.Line2D([0], [0], color='gray', linewidth=2, linestyle=':', label='被阻止的路径'),
-    ]
-    ax.legend(handles=legend_elements, loc='upper right', fontsize=14, framealpha=0.9)
-    
-    ax.set_title('图3. 动态方向锁定机制预防死锁示意图', 
-                fontsize=14, weight='bold', pad=20)
-    
+    """图3：连续多子图，地图 8×8，第2、7行为主通道。V1 终点(7,6)。V2 (3,6)→(5,6)→(5,7)放货→(0,6)，第11张起不出现。V3 空车从(6,1)，(6,0)有货，先去(6,0)再回(6,1)再往(0,1)。"""
+    width, height = 8, 8
+    main_channel_rows = [6, 1]  # 第2行(y=6)、第7行(y=1)
+    updown_cells = [(4, 5), (4, 4), (4, 3), (4, 2)]  # 第5列 上下巷道（两主通道之间）
+
+    # V1 完整路径：(1,1)→(4,1)→(4,6)→(7,6)，共 12 步
+    full_path = [(1, 1), (2, 1), (3, 1), (4, 1), (4, 2), (4, 3), (4, 4), (4, 5), (4, 6), (5, 6), (6, 6), (7, 6)]
+    # V2 路径：(3,6)→(5,6)→(5,7)放货→(0,6)；第10张到(0,6)后，第11张起不出现
+    v2_path = [(3, 6), (4, 6), (5, 6), (5, 7), (5, 6), (4, 6), (3, 6), (2, 6), (1, 6), (0, 6)]
+    v2_positions = [(3, 6), (4, 6), (5, 6), (5, 7), (5, 6), (4, 6), (3, 6), (2, 6), (1, 6), (0, 6), None, None]  # idx>=10 不画 V2
+    v2_loaded = [True, True, True, True, False, False, False, False, False, False, False, False]
+    # V3 空车从(6,1)；第一张(6,0)有货，第二张V3到(6,0)取货即负载，第三四张回(6,1)停住，第五张起往(0,1)
+    v3_path = [(6, 1), (6, 0), (6, 1), (6, 1), (5, 1), (4, 1), (3, 1), (2, 1), (1, 1), (0, 1)]
+    v3_positions = [(6, 1), (6, 0), (6, 1), (6, 1), (5, 1), (4, 1), (3, 1), (2, 1), (1, 1), (0, 1), (0, 1), (0, 1)]  # 第二张到(6,0)，第三四张停(6,1)，第五张起动
+    v3_loaded = [False, True, True, True, True, True, True, True, True, True, True, True]  # 第二张到(6,0)即负载
+    n_steps = 8
+    n_cols = 4
+    n_rows = (n_steps + n_cols - 1) // n_cols
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows))
+    if n_rows == 1:
+        axes = axes.reshape(1, -1)
+    for idx in range(n_cols * n_rows):
+        row, col = idx // n_cols, idx % n_cols
+        ax = axes[row, col]
+        if idx >= n_steps:
+            ax.axis('off')
+            continue
+        (vx, vy) = full_path[idx]
+        v2_pos = v2_positions[idx]
+        (v2x, v2y) = v2_pos if v2_pos is not None else (None, None)
+        v2_is_loaded = v2_loaded[idx]
+        (v3x, v3y) = v3_positions[idx]
+        v3_is_loaded = v3_loaded[idx]
+        create_grid_base(ax, width, height)
+        for y in range(height):
+            for x in range(width):
+                if (x, y) in updown_cells:
+                    draw_cell(ax, x, y, cell_type='updown')
+                elif y in main_channel_rows:
+                    draw_cell(ax, x, y, cell_type='main')
+                else:
+                    draw_cell(ax, x, y, cell_type='normal')
+        # 第一、二张 (6,0) 有货物；从第五张开始 (5,7) 一直有货物
+        if idx <= 1:
+            cargo_circle = patches.Circle((6, 0), 0.25, facecolor=COLOR_CARGO, edgecolor='darkgreen',
+                                          linewidth=1.5, alpha=0.7, zorder=6)
+            ax.add_patch(cargo_circle)
+        if idx >= 4:
+            cargo_circle = patches.Circle((5, 7), 0.25, facecolor=COLOR_CARGO, edgecolor='darkgreen',
+                                          linewidth=1.5, alpha=0.7, zorder=6)
+            ax.add_patch(cargo_circle)
+        # V1：只画尚未走过的路径
+        remaining = full_path[idx:]
+        if len(remaining) >= 2:
+            draw_path(ax, remaining, color=COLOR_VEHICLE_1, linewidth=2, alpha=0.35)
+        # V2：只画尚未走过的路径
+        if v2_pos is not None and idx <= 9:
+            remaining_v2 = v2_path[idx:]
+            if len(remaining_v2) >= 2:
+                draw_path(ax, remaining_v2, color=COLOR_VEHICLE_2, linewidth=2, alpha=0.35)
+        # V3：前两张只展示 (6,1)→(6,0) 和 (6,0)→(6,1)；第三四张无路径；第五张起展示到(0,1)的路径
+        if idx <= 1:
+            seg = [(6, 1), (6, 0)] if idx == 0 else [(6, 0), (6, 1)]
+            draw_path(ax, seg, color=COLOR_VEHICLE_3, linewidth=2, alpha=0.35)
+        elif idx >= 4:
+            remaining_v3 = v3_path[idx:]
+            if len(remaining_v3) >= 2:
+                draw_path(ax, remaining_v3, color=COLOR_VEHICLE_3, linewidth=2, alpha=0.35)
+        # 每次锁定三格：从自己开始往后算三格（参考V2）
+        locked = full_path[idx : idx + 3]
+        for (lx, ly) in locked:
+            if (lx, ly) in updown_cells:
+                draw_cell(ax, lx, ly, cell_type='updown', locked=True)
+            elif ly in main_channel_rows:
+                draw_cell(ax, lx, ly, cell_type='main', locked=True)
+            else:
+                draw_cell(ax, lx, ly, cell_type='normal', locked=True)
+        # V2 前两张图锁定到 (5,6)；第3、4张锁定 (5,7)(5,6)；从第5张开始锁定三格
+        if v2_pos is not None and idx <= 1:
+            v2_locked = [(3, 6), (4, 6), (5, 6)] if idx == 0 else [(4, 6), (5, 6)]
+            for (lx, ly) in v2_locked:
+                if (lx, ly) in updown_cells:
+                    draw_cell(ax, lx, ly, cell_type='updown', locked=True, lock_color=COLOR_VEHICLE_2)
+                elif ly in main_channel_rows:
+                    draw_cell(ax, lx, ly, cell_type='main', locked=True, lock_color=COLOR_VEHICLE_2)
+                else:
+                    draw_cell(ax, lx, ly, cell_type='normal', locked=True, lock_color=COLOR_VEHICLE_2)
+        elif v2_pos is not None and 2 <= idx <= 3:
+            v2_locked = [(5, 7), (5, 6)]
+            for (lx, ly) in v2_locked:
+                if (lx, ly) in updown_cells:
+                    draw_cell(ax, lx, ly, cell_type='updown', locked=True, lock_color=COLOR_VEHICLE_2)
+                elif ly in main_channel_rows:
+                    draw_cell(ax, lx, ly, cell_type='main', locked=True, lock_color=COLOR_VEHICLE_2)
+                else:
+                    draw_cell(ax, lx, ly, cell_type='normal', locked=True, lock_color=COLOR_VEHICLE_2)
+        elif v2_pos is not None and idx >= 4:
+            # 从自己开始往后算三格
+            v2_locked = v2_path[idx : idx + 3]
+            for (lx, ly) in v2_locked:
+                if (lx, ly) in updown_cells:
+                    draw_cell(ax, lx, ly, cell_type='updown', locked=True, lock_color=COLOR_VEHICLE_2)
+                elif ly in main_channel_rows:
+                    draw_cell(ax, lx, ly, cell_type='main', locked=True, lock_color=COLOR_VEHICLE_2)
+                else:
+                    draw_cell(ax, lx, ly, cell_type='normal', locked=True, lock_color=COLOR_VEHICLE_2)
+        # V3 第一、二张锁定 (6,1)(6,0)；第三四张只锁定 (6,1)，无路径；第五张起锁定三格并展示到(0,1)路径
+        if idx <= 1:
+            v3_locked = [(6, 1), (6, 0)]
+            for (lx, ly) in v3_locked:
+                if (lx, ly) in updown_cells:
+                    draw_cell(ax, lx, ly, cell_type='updown', locked=True, lock_color=COLOR_VEHICLE_3)
+                elif ly in main_channel_rows:
+                    draw_cell(ax, lx, ly, cell_type='main', locked=True, lock_color=COLOR_VEHICLE_3)
+                else:
+                    draw_cell(ax, lx, ly, cell_type='normal', locked=True, lock_color=COLOR_VEHICLE_3)
+        elif 2 <= idx <= 3:
+            draw_cell(ax, 6, 1, cell_type='main', locked=True, lock_color=COLOR_VEHICLE_3)
+        elif idx >= 4:
+            # 从自己开始往后算三格（参考V2）
+            v3_locked = v3_path[idx : idx + 3]
+            for (lx, ly) in v3_locked:
+                if (lx, ly) in updown_cells:
+                    draw_cell(ax, lx, ly, cell_type='updown', locked=True, lock_color=COLOR_VEHICLE_3)
+                elif ly in main_channel_rows:
+                    draw_cell(ax, lx, ly, cell_type='main', locked=True, lock_color=COLOR_VEHICLE_3)
+                else:
+                    draw_cell(ax, lx, ly, cell_type='normal', locked=True, lock_color=COLOR_VEHICLE_3)
+        draw_vehicle(ax, vx, vy, 'V1', is_loaded=True)
+        if v2_pos is not None and idx <= 9:
+            draw_vehicle(ax, v2x, v2y, 'V2', is_loaded=v2_is_loaded)
+        draw_vehicle(ax, v3x, v3y, 'V3', is_loaded=v3_is_loaded)
+        if idx == 3:
+            legend_elements = [
+                patches.Patch(facecolor=COLOR_MAIN_CHANNEL, alpha=0.8, label='主通道'),
+                patches.Patch(facecolor=COLOR_NORMAL_CHANNEL, alpha=0.6, label='子通道'),
+                patches.Patch(facecolor=COLOR_UPDOWN_CHANNEL, alpha=0.8, label='上下巷道'),
+                patches.Patch(facecolor='none', edgecolor=COLOR_LOCKED, linewidth=3, label='锁定格子'),
+                plt.Line2D([0], [0], color=COLOR_VEHICLE_1, linewidth=2, label='V1路径'),
+                plt.Line2D([0], [0], color=COLOR_VEHICLE_2, linewidth=2, label='V2路径'),
+                plt.Line2D([0], [0], color=COLOR_VEHICLE_3, linewidth=2, label='V3路径'),
+                patches.Circle((0, 0), 0.1, facecolor=COLOR_CARGO, edgecolor='darkgreen', label='货物'),
+            ]
+            ax.legend(handles=legend_elements, loc='upper right', fontsize=10, framealpha=0.9)
     plt.tight_layout()
     filename = 'figure3_direction_lock.png'
     plt.savefig(filename, dpi=300, bbox_inches='tight', facecolor='white')
@@ -658,5 +629,5 @@ if __name__ == '__main__':
     # 先生成地图类型说明示意图，便于文章中统一解释
     figure0_map_demo()
     figure1_segmented_locking()
-    # figure2_smart_avoidance()
-    # figure3_direction_lock()
+    figure2_smart_avoidance()
+    figure3_direction_lock()
